@@ -1,0 +1,39 @@
+<section class="card" aria-labelledby="step-record">
+  <h2 id="step-record" class="step-title">
+    <span class="step-badge" aria-hidden="true">
+      4
+    </span>{' '}
+    Rekam
+  </h2>
+  <ol data-el="record-guide" class="mt-3 list-decimal space-y-1 pl-6 text-sm text-slate-700 dark:text-slate-300"></ol>
+  <div class="mt-4 flex flex-wrap items-center gap-2">
+    <button type="button" data-el="record" class="btn-primary" disabled>
+      ● Mulai Rekam
+    </button>
+    <button type="button" data-el="stop" class="btn-danger" disabled>
+      ■ Berhenti
+    </button>
+    <button type="button" data-el="cancel" class="btn-secondary" disabled>
+      Batalkan
+    </button>
+  </div>
+  <div
+    data-el="recording-status"
+    class="mt-4 hidden rounded-xl bg-red-50 p-4 text-sm dark:bg-red-950/40"
+    aria-live="polite"
+  >
+    <p class="flex items-center gap-2 font-semibold text-red-700 dark:text-red-300">
+      <span class="inline-block h-3 w-3 animate-pulse rounded-full bg-red-600" aria-hidden="true"></span>
+      Merekam{' '}
+      <span data-el="recording-time" class="font-mono">
+        00:00
+      </span>{' '}
+      /{' '}
+      <span data-el="recording-limit" class="font-mono">
+        00:00
+      </span>
+    </p>
+    <p data-el="recording-audio" class="mt-1"></p>
+    <p data-el="recording-size" class="mt-1 text-slate-600 dark:text-slate-400"></p>
+  </div>
+</section>

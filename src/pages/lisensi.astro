@@ -1,0 +1,52 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const libraries = [
+  {
+    name: 'Mediabunny',
+    license: 'MPL-2.0',
+    url: 'https://github.com/Vanilagy/mediabunny',
+    use: 'Membaca, mengonversi, dan menulis MP4/MP3/WebM.',
+  },
+  {
+    name: '@mediabunny/aac-encoder',
+    license: 'MPL-2.0 (berbasis FFmpeg libavcodec, LGPL-2.1+)',
+    url: 'https://github.com/Vanilagy/mediabunny/tree/main/packages/aac-encoder',
+    use: 'Encoder AAC WebAssembly bila browser tidak punya encoder AAC.',
+  },
+  {
+    name: '@mediabunny/mp3-encoder',
+    license: 'MPL-2.0 (berbasis LAME, LGPL-2.0+)',
+    url: 'https://github.com/Vanilagy/mediabunny/tree/main/packages/mp3-encoder',
+    use: 'Encoder MP3 WebAssembly.',
+  },
+  { name: 'fflate', license: 'MIT', url: 'https://github.com/101arrowz/fflate', use: 'Membaca arsip ZIP.' },
+  {
+    name: 'es-module-lexer',
+    license: 'MIT',
+    url: 'https://github.com/guybedford/es-module-lexer',
+    use: 'Menulis ulang import modul di proyek ZIP.',
+  },
+  { name: 'Astro', license: 'MIT', url: 'https://github.com/withastro/astro', use: 'Framework situs.' },
+  { name: 'Tailwind CSS', license: 'MIT', url: 'https://github.com/tailwindlabs/tailwindcss', use: 'Styling.' },
+];
+---
+
+<BaseLayout title="Lisensi pihak ketiga">
+  <article class="prose-page max-w-3xl">
+    <h1 class="text-3xl font-bold">Lisensi pihak ketiga</h1>
+    <p class="mt-4">
+      Aplikasi ini memakai pustaka open-source berikut. Kode sumber setiap pustaka tersedia di tautan masing-masing.
+    </p>
+    <ul class="mt-4">
+      {libraries.map((lib) => (
+        <li>
+          <a href={lib.url} rel="noopener noreferrer">
+            {lib.name}
+          </a>{' '}
+          — {lib.license}. {lib.use}
+        </li>
+      ))}
+    </ul>
+  </article>
+</BaseLayout>

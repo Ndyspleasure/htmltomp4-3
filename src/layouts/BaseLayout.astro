@@ -1,0 +1,93 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  bare?: boolean;
+}
+
+const {
+  title,
+  description = 'Rekam animasi HTML (.html atau .zip) di browser Anda lalu ekspor ke MP4 atau MP3. File tidak diunggah ke server.',
+  bare = false,
+} = Astro.props;
+const fullTitle = title === 'HTML ke MP4/MP3' ? title : `${title} · HTML ke MP4/MP3`;
+const nav = [
+  { href: '/', label: 'Converter' },
+  { href: '/bantuan', label: 'Bantuan' },
+  { href: '/privasi', label: 'Privasi' },
+];
+const current = Astro.url.pathname.replace(/\/$/, '') || '/';
+---
+
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{fullTitle}</title>
+  </head>
+  <body class={bare ? 'm-0 overflow-hidden bg-black' : 'min-h-screen'}>
+    {bare ? (
+      <slot />
+    ) : (
+      <>
+        <a
+          href="#main"
+          class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-slate-900"
+        >
+          Lewati ke konten
+        </a>
+        <header class="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+          <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <a href="/" class="flex items-center gap-2 font-bold">
+              <img src="/favicon.svg" alt="" width="28" height="28" />
+              <span>HTML ke MP4/MP3</span>
+            </a>
+            <nav aria-label="Navigasi utama">
+              <ul class="flex gap-1 text-sm">
+                {nav.map((item) => (
+                  <li>
+                    <a
+                      href={item.href}
+                      class:list={[
+                        'rounded-lg px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800',
+                        current === item.href && 'bg-slate-100 font-semibold dark:bg-slate-800',
+                      ]}
+                      aria-current={current === item.href ? 'page' : undefined}
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </div>
+        </header>
+        <main id="main" class="mx-auto max-w-6xl px-4 py-8">
+          <slot />
+        </main>
+        <footer class="border-t border-slate-200 py-6 text-center text-sm text-slate-500 dark:border-slate-800">
+          <p>Semua proses berjalan di browser Anda. File tidak dikirim ke server.</p>
+          <p class="mt-1">
+            <a class="underline" href="/privasi">
+              Privasi
+            </a>{' '}
+            ·{' '}
+            <a class="underline" href="/bantuan">
+              Bantuan &amp; kompatibilitas
+            </a>{' '}
+            ·
+            <a class="underline" href="/lisensi">
+              Lisensi pihak ketiga
+            </a>
+          </p>
+        </footer>
+      </>
+    )}
+  </body>
+</html>

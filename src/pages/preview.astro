@@ -1,0 +1,16 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Preview Rekaman" bare>
+  <div data-el="window-host" class="flex h-screen w-screen items-center justify-center overflow-hidden bg-black">
+    <p data-el="window-status" class="px-6 text-center text-sm text-slate-300">
+      Menunggu data preview dari tab converter…
+    </p>
+  </div>
+</BaseLayout>
+
+<script>
+  import { initPreviewWindow } from '../features/converter/ui/preview-window';
+  initPreviewWindow(document);
+</script>

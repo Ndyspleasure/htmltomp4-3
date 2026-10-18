@@ -1,0 +1,145 @@
+---
+import {
+  FRAME_RATES,
+  RECORDING_LIMITS,
+  RESOLUTION_PRESETS,
+  DEFAULT_SETTINGS,
+  MP4_VIDEO_CODECS,
+} from '../config/converter-config';
+---
+
+<section class="card" aria-labelledby="step-settings">
+  <h2 id="step-settings" class="step-title">
+    <span class="step-badge" aria-hidden="true">
+      3
+    </span>{' '}
+    Pengaturan ekspor
+  </h2>
+  <form data-el="settings" class="mt-4 grid gap-4 sm:grid-cols-2" novalidate>
+    <fieldset class="sm:col-span-2">
+      <legend class="field-label">Format keluaran</legend>
+      <div class="flex flex-wrap gap-2" data-el="format-group">
+        {[
+          { value: 'mp4', label: 'MP4 (video)' },
+          { value: 'mp3', label: 'MP3 (audio saja)' },
+          { value: 'webm', label: 'WebM (alternatif)' },
+        ].map((option) => (
+          <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 has-[:disabled]:opacity-50 dark:border-slate-700 dark:has-[:checked]:bg-slate-800">
+            <input
+              type="radio"
+              name="outputFormat"
+              value={option.value}
+              checked={option.value === DEFAULT_SETTINGS.outputFormat}
+            />
+            {option.label}
+          </label>
+        ))}
+      </div>
+      <p data-el="format-note" class="hint mt-2" aria-live="polite"></p>
+    </fieldset>
+
+    <div data-el="codec-field">
+      <label for="mp4-codec" class="field-label">
+        Codec video MP4
+      </label>
+      <select id="mp4-codec" name="mp4VideoCodec" class="field">
+        {MP4_VIDEO_CODECS.map((entry) => (
+          <option value={entry.codec}>
+            {entry.label}
+            {entry.limitedCompatibility ? ' (kompatibilitas terbatas)' : ' (paling kompatibel)'}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <div data-el="resolution-field">
+      <label for="resolution" class="field-label">
+        Resolusi / ukuran viewport
+      </label>
+      <select id="resolution" name="resolutionId" class="field">
+        {RESOLUTION_PRESETS.map((preset) => (
+          <option value={preset.id} selected={preset.id === DEFAULT_SETTINGS.resolutionId}>
+            {preset.label}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <div data-el="fps-field">
+      <label for="fps" class="field-label">
+        Frame rate
+      </label>
+      <select id="fps" name="frameRate" class="field">
+        {FRAME_RATES.map((fps) => (
+          <option value={fps} selected={fps === DEFAULT_SETTINGS.frameRate}>
+            {fps} FPS
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <div>
+      <label for="duration" class="field-label">
+        Durasi rekaman (detik)
+      </label>
+      <input
+        id="duration"
+        name="durationSeconds"
+        type="number"
+        class="field"
+        min={RECORDING_LIMITS.minDurationSeconds}
+        max={RECORDING_LIMITS.maxDurationSeconds}
+        step="1"
+        value={DEFAULT_SETTINGS.durationSeconds}
+        aria-describedby="duration-hint"
+      />
+      <p id="duration-hint" class="hint mt-1">
+        Berhenti otomatis setelah durasi ini (maks. {RECORDING_LIMITS.maxDurationSeconds} detik). Bisa dihentikan lebih
+        awal.
+      </p>
+    </div>
+
+    <fieldset class="sm:col-span-2">
+      <legend class="field-label">Cara merekam</legend>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <label
+          data-el="mode-this-tab"
+          class="flex cursor-pointer gap-3 rounded-xl border border-slate-300 p-3 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 has-[:disabled]:opacity-50 dark:border-slate-700 dark:has-[:checked]:bg-slate-800"
+        >
+          <input type="radio" name="captureMode" value="this-tab" class="mt-1" />
+          <span>
+            <strong>Tab ini (area preview saja)</strong>
+            <br />
+            <span class="hint">Pilih “Tab ini” di dialog. Hanya area preview yang direkam (Chrome/Edge desktop).</span>
+          </span>
+        </label>
+        <label class="flex cursor-pointer gap-3 rounded-xl border border-slate-300 p-3 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 dark:border-slate-700 dark:has-[:checked]:bg-slate-800">
+          <input type="radio" name="captureMode" value="preview-window" class="mt-1" />
+          <span>
+            <strong>Jendela preview terpisah</strong>
+            <br />
+            <span class="hint">
+              Buka jendela preview, lalu pilih tab “Preview Rekaman” di dialog. Kualitas resolusi penuh.
+            </span>
+          </span>
+        </label>
+      </div>
+    </fieldset>
+
+    <div class="flex flex-col gap-2 sm:col-span-2">
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="includeAudio" checked={DEFAULT_SETTINGS.includeAudio} />
+        Sertakan audio tab (jika browser mendukung)
+      </label>
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="restartOnRecord" checked={DEFAULT_SETTINGS.restartOnRecord} />
+        Mulai ulang animasi saat perekaman dimulai
+      </label>
+    </div>
+  </form>
+
+  <details class="mt-4 text-sm" data-el="capabilities">
+    <summary class="cursor-pointer font-medium">Kemampuan browser ini</summary>
+    <ul data-el="capability-list" class="mt-2 space-y-1"></ul>
+  </details>
+</section>
