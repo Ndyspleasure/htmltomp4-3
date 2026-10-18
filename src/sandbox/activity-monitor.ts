@@ -54,16 +54,23 @@ export class ActivityMonitor {
   /** Starts observing the written document. */
   observe(doc: Document): void {
     this.observer?.disconnect();
-    this.observer = new MutationObserver(() => {
-      this.lastActivityMs = this.now();
+    this.observer = new MutationObserver((records) => {
+      if (records.some(isRealChange)) this.lastActivityMs = this.now();
     });
-    this.observer.observe(doc, { subtree: true, childList: true, attributes: true, characterData: true });
+    this.observer.observe(doc, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+      attributeOldValue: true,
+      characterDataOldValue: true,
+    });
   }
 
   /** Call after each virtual tick: finite running Web Animations also count as activity. */
   sample(doc: Document, nowMs: number): void {
     // Flush pending mutation records synchronously so they are attributed to this tick.
-    if (this.observer && this.observer.takeRecords().length > 0) this.lastActivityMs = nowMs;
+    if (this.observer && this.observer.takeRecords().some(isRealChange)) this.lastActivityMs = nowMs;
     this.infiniteRunning = false;
     if (typeof doc.getAnimations !== 'function') return;
     for (const animation of doc.getAnimations()) {
@@ -88,4 +95,28 @@ export class ActivityMonitor {
   disconnect(): void {
     this.observer?.disconnect();
   }
+}
+
+/**
+ * Many players redraw every frame (`el.textContent = sameText`, `style.width = sameWidth`). Those writes
+ * produce mutation records without changing anything visible, so they must not count as activity.
+ */
+export function isRealChange(record: MutationRecord): boolean {
+  if (record.type === 'attributes') {
+    const target = record.target as Element;
+    const name = record.attributeName ?? '';
+    const now = record.attributeNamespace
+      ? target.getAttributeNS(record.attributeNamespace, name)
+      : target.getAttribute(name);
+    return now !== record.oldValue;
+  }
+  if (record.type === 'characterData') return (record.target as CharacterData).data !== record.oldValue;
+  // childList: replacing text with identical text (textContent = same value) is not a change.
+  const removed = [...record.removedNodes];
+  const added = [...record.addedNodes];
+  const textOnly = (nodes: Node[]) => nodes.every((node) => node.nodeType === Node.TEXT_NODE);
+  if (removed.length > 0 && textOnly(removed) && textOnly(added)) {
+    return removed.map((n) => n.textContent).join('') !== added.map((n) => n.textContent).join('');
+  }
+  return true;
 }

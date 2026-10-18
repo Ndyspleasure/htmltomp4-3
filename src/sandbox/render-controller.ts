@@ -13,6 +13,7 @@ import { WebAudioCapture } from './audio-capture';
 import { clickStartControl } from './auto-start';
 import { detectTiming } from './duration-detect';
 import { FrameRasterizer } from './frame-rasterizer';
+import { findStage } from './layout-detect';
 import { MediaTracker } from './media-tracker';
 import { VirtualClock } from './virtual-clock';
 
@@ -159,9 +160,11 @@ export class RenderController {
     width: number;
     height: number;
     autoStart: boolean;
+    cropToStage: boolean;
   }): Promise<number> {
     await this.start(options.autoStart);
-    const rasterizer = new FrameRasterizer(this.win.document, this.clock, options.width, options.height);
+    const stage = options.cropToStage ? (findStage(this.win.document)?.element ?? null) : null;
+    const rasterizer = new FrameRasterizer(this.win.document, this.clock, options.width, options.height, stage);
     const total = Math.max(1, Math.round(options.durationSeconds * options.fps));
     const frameMs = 1000 / options.fps;
     try {

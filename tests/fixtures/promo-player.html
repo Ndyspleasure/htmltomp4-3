@@ -13,6 +13,9 @@
   .bar{position:absolute;left:0;bottom:0;height:8px;background:#f59e0b;width:0}
   .ball{position:absolute;top:20%;left:0;width:40px;height:40px;border-radius:50%;background:#38bdf8}
   .scene2{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:24px}
+  body{flex-direction:column;gap:8px}
+  .stage{height:calc(100vh - 60px)}
+  #ct{display:flex;gap:8px;align-items:center;background:#ff00ff;padding:4px 12px;border-radius:8px}
 </style>
 </head>
 <body>
@@ -23,16 +26,20 @@
     <div class="scene2" id="scene2">Selesai!</div>
     <div class="bar" id="bar"></div>
   </div>
+  <!-- Player controls outside the stage (like real "video" HTML files); must not appear when cropping. -->
+  <div id="ct"><button id="pp" aria-label="Putar/jeda">⏸</button><span id="tm">0:00</span></div>
 <script>
   const DURATION = 6000;
   let start = null;
+  // Like many players, redraw every frame forever, even after the animation ended (same values).
   function frame(t) {
     if (start === null) start = t;
     const p = Math.min(1, (t - start) / DURATION);
+    document.getElementById('tm').textContent = '0:0' + Math.floor(p * 6);
     document.getElementById('bar').style.width = (p * 100) + '%';
     document.getElementById('ball').style.transform = 'translateX(' + Math.round(p * 300) + 'px)';
     if (p > 0.5) { document.getElementById('scene2').style.display = 'flex'; }
-    if (p < 1) requestAnimationFrame(frame);
+    requestAnimationFrame(frame);
   }
   document.getElementById('play').addEventListener('click', () => {
     document.getElementById('play').style.display = 'none';

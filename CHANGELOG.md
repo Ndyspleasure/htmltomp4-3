@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — Perbaikan dari uji file nyata (video promosi 9:16, 60 detik)
+
+- Durasi otomatis tidak lagi gagal pada pemutar yang menulis ulang nilai yang sama setiap frame (mis. `textContent`
+  identik): mutasi DOM tanpa perubahan nyata diabaikan.
+- **Hanya area animasi:** panggung animasi (mis. bingkai 9:16) dideteksi dan dirender sendiri, tanpa latar halaman
+  maupun tombol pemutar di luar panggung (bisa dimatikan).
+- Render ±10× lebih cepat: adegan yang tidak terlihat (opacity 0/display none) tidak ikut diproses.
+- Audio Web Audio direkam paralel dengan render frame, sehingga total waktu ≈ durasi animasi.
+
 ## 0.2.0 — Konversi langsung
 
 - **Konversi langsung (default):** unggah → konversi → unduh tanpa dialog izin rekam layar. Animasi dirender frame demi

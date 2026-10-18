@@ -2,7 +2,7 @@ import { ENCODER_STALL_TIMEOUT_MS } from '../../../config/converter-config';
 import { ConverterError } from '../errors';
 import type { EncoderRequest, EncoderResponse } from '../workers/protocol';
 import type { ConvertRequest, ConvertResult, EncodeStage, EncoderSupport, ProgressCallback } from './convert-media';
-import type { FrameEncodeConfig } from './frame-encoder';
+import type { FrameEncodeConfig, MixedAudio } from './frame-encoder';
 
 export type { ConvertRequest, ConvertResult, EncodeStage, EncoderSupport };
 
@@ -21,6 +21,8 @@ export interface FrameSessionHandle {
   ready: Promise<void>;
   /** Transfers the bitmap to the worker; resolves when that frame has been encoded. */
   addFrame(bitmap: ImageBitmap, index: number): Promise<void>;
+  /** Supplies audio that was declared as 'deferred' in the config (null = silence). */
+  setAudio(audio: MixedAudio | null): void;
   /** Finalizes and validates the file. */
   finish(): Promise<ConvertResult>;
 }
@@ -74,6 +76,10 @@ export class EncoderClient {
         const acked = new Promise<void>((resolve) => ackWaiters.set(index, resolve));
         worker.postMessage({ type: 'frames-add', id, index, bitmap } satisfies EncoderRequest, [bitmap]);
         return orFail(acked);
+      },
+      setAudio: (audio) => {
+        const transfer = audio ? audio.channels.map((channel) => channel.buffer as ArrayBuffer) : [];
+        worker.postMessage({ type: 'frames-audio', id, audio } satisfies EncoderRequest, transfer);
       },
       finish: () => {
         worker.postMessage({ type: 'frames-end', id } satisfies EncoderRequest);

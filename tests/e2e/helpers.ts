@@ -125,3 +125,44 @@ export function ffprobe(path: string): { format: string; codecs: string[]; durat
 export async function expectNoError(page: Page) {
   await expect(page.locator('[data-el="global-error"]')).toBeHidden();
 }
+
+/**
+ * Returns true if a frame at `seconds` contains pixels close to `rgb` (requires ffmpeg; null when it is
+ * not installed). Used to prove that elements outside the cropped stage never reach the video.
+ */
+export function frameContainsColor(path: string, seconds: number, rgb: [number, number, number]): boolean | null {
+  let raw: Buffer;
+  try {
+    raw = execFileSync(
+      'ffmpeg',
+      [
+        '-v',
+        'error',
+        '-ss',
+        String(seconds),
+        '-i',
+        path,
+        '-frames:v',
+        '1',
+        '-vf',
+        'scale=270:-2',
+        '-f',
+        'rawvideo',
+        '-pix_fmt',
+        'rgb24',
+        '-',
+      ],
+      {
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+  for (let i = 0; i + 2 < raw.length; i += 3) {
+    if (Math.abs(raw[i]! - rgb[0]) < 40 && Math.abs(raw[i + 1]! - rgb[1]) < 40 && Math.abs(raw[i + 2]! - rgb[2]) < 40)
+      return true;
+  }
+  return false;
+}

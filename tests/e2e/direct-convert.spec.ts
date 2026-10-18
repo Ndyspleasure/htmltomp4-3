@@ -1,7 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { htmlFile, zipBuffer } from './fixtures';
-import { configure, downloadResult, expectNoError, ffprobe, loadFixture, waitForStatus } from './helpers';
+import {
+  configure,
+  downloadResult,
+  expectNoError,
+  ffprobe,
+  frameContainsColor,
+  loadFixture,
+  waitForStatus,
+} from './helpers';
 
 const promo = () => htmlFile(readFileSync('tests/fixtures/promo-player.html', 'utf8'), 'promo-player.html');
 const tone = readFileSync('tests/fixtures/media/tone.mp3');
@@ -36,11 +44,15 @@ test.describe('konversi langsung (tanpa izin rekam layar)', () => {
     expect(inspection.container).toBe('mp4');
     expect(inspection.video).toMatchObject({ width: 1080, height: 1920 });
     expect(inspection.audio?.codec).toBe('aac');
-    // The fixture animates for 6 s; the render stops shortly after it stops changing.
+    // The fixture animates for 6 s and keeps rewriting identical values afterwards; the render still
+    // stops shortly after the picture stops changing.
     expect(inspection.durationSeconds).toBeGreaterThan(5.5);
     expect(inspection.durationSeconds).toBeLessThan(8);
     const probe = ffprobe(path);
     if (probe) expect(probe.codecs).toContain('aac');
+    // Only the 9:16 stage is rendered: the magenta player bar below it must not appear.
+    const magenta = frameContainsColor(path, 3, [255, 0, 255]);
+    if (magenta !== null) expect(magenta).toBe(false);
   });
 
   test('exports MP3 from Web Audio without any capture permission', async ({ page }, testInfo) => {
@@ -87,6 +99,19 @@ test.describe('konversi langsung (tanpa izin rekam layar)', () => {
     const { inspection } = await downloadResult(page, testInfo.outputDir);
     expect(inspection.durationSeconds).toBeGreaterThan(2.8);
     expect(inspection.durationSeconds).toBeLessThan(3.5);
+  });
+
+  test('can render the whole page instead of the stage', async ({ page }, testInfo) => {
+    await loadFixture(page, promo());
+    await waitForStatus(page, ['ready-to-record']);
+    await configure(page, { format: 'webm', autoDuration: false, duration: 1, includeAudio: false });
+    await page.uncheck('input[name="cropToStage"]');
+    await page.click('[data-el="record"]');
+    await waitForStatus(page, ['completed', 'error'], 120_000);
+    await expectNoError(page);
+    const { path } = await downloadResult(page, testInfo.outputDir);
+    const magenta = frameContainsColor(path, 0.5, [255, 0, 255]);
+    if (magenta !== null) expect(magenta).toBe(true);
   });
 
   test('honours a manual duration', async ({ page }, testInfo) => {

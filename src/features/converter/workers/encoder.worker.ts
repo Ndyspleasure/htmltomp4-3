@@ -80,6 +80,19 @@ self.addEventListener('message', (event: MessageEvent<EncoderRequest>) => {
       });
       return;
     }
+    case 'frames-audio': {
+      const session = frameSessions.get(message.id);
+      if (!session) return;
+      session.chain = session.chain.then(async () => {
+        if (session.failed) return;
+        try {
+          await (await session.encoder).setAudio(message.audio);
+        } catch (error) {
+          failSession(message.id, session, error);
+        }
+      });
+      return;
+    }
     case 'frames-end': {
       const session = frameSessions.get(message.id);
       if (!session) return;

@@ -110,6 +110,7 @@ export function initConverterApp(doc: Document): void {
     modeThisTab: q(doc, 'mode-this-tab'),
     captureModeField: q(doc, 'capture-mode-field'),
     restartField: q(doc, 'restart-field'),
+    cropField: q(doc, 'crop-field'),
     durationDetected: q(doc, 'duration-detected'),
     layoutHint: q(doc, 'layout-hint'),
     layoutHintText: q(doc, 'layout-hint-text'),
@@ -200,6 +201,7 @@ export function initConverterApp(doc: Document): void {
       method,
       autoDuration: checked('autoDuration'),
       autoStart: checked('autoStart'),
+      cropToStage: checked('cropToStage'),
       outputFormat,
       resolutionId: preset.id as ResolutionPresetId,
       width: preset.width,
@@ -260,6 +262,7 @@ export function initConverterApp(doc: Document): void {
     ui.stop.classList.toggle('hidden', direct);
     ui.captureModeField.classList.toggle('hidden', direct);
     ui.restartField.classList.toggle('hidden', direct);
+    ui.cropField.classList.toggle('hidden', !direct);
     const durationInput = ui.settings.querySelector<HTMLInputElement>('input[name="durationSeconds"]');
     if (durationInput && settings.autoDuration && direct) durationInput.disabled = true;
     ui.recordTitle.textContent = direct ? 'Konversi' : 'Rekam';
@@ -653,6 +656,7 @@ export function initConverterApp(doc: Document): void {
         fallbackSeconds: settings.durationSeconds,
         includeAudio: settings.includeAudio,
         autoStart: settings.autoStart,
+        cropToStage: settings.cropToStage,
         mp4VideoCodec: settings.mp4VideoCodec,
         encoder,
         signal: abort.signal,
