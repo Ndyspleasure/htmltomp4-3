@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 — Encoder yang gagal saat encode tidak lagi menggagalkan konversi
+
+- Memperbaiki `EncodingError: The given encoding is not supported.` pada sebagian browser/perangkat (mis. encoder
+  H.264 hardware untuk 1080×1920): `isConfigSupported()` bisa lolos, tetapi encoder gagal di frame pertama.
+- Sebelum render dimulai, encoder video dicoba dengan beberapa frame sungguhan. Jika gagal, aplikasi otomatis memakai
+  encoder software, lalu codec lain dalam kontainer yang sama (VP9/AV1 untuk MP4, berlabel kompatibilitas terbatas).
+  Fallback ini diberitahukan di hasil.
+- Encoder audio AAC/MP3 bawaan browser yang gagal saat dicoba otomatis diganti encoder WASM.
+- Jika tidak ada encoder yang berhasil, pesan error menyebutkan setiap percobaan dan saran (resolusi lebih kecil atau
+  browser lain).
+
 ## 0.2.1 — Perbaikan dari uji file nyata (video promosi 9:16, 60 detik)
 
 - Durasi otomatis tidak lagi gagal pada pemutar yang menulis ulang nilai yang sama setiap frame (mis. `textContent`

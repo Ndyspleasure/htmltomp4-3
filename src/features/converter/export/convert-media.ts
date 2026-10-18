@@ -56,9 +56,16 @@ export function loadMediabunny(): Promise<Mediabunny> {
   return mediabunnyPromise;
 }
 
-/** Registers WASM encoders only when the browser has no native one. Returns how the codec is provided. */
-export async function ensureAudioEncoder(mb: Mediabunny, codec: 'aac' | 'mp3'): Promise<'native' | 'wasm' | null> {
-  if (await mb.canEncodeAudio(codec)) return 'native';
+/**
+ * Registers WASM encoders only when the browser has no native one (or `forceWasm`, after the native one
+ * failed a trial encode; registered encoders take priority). Returns how the codec is provided.
+ */
+export async function ensureAudioEncoder(
+  mb: Mediabunny,
+  codec: 'aac' | 'mp3',
+  forceWasm = false,
+): Promise<'native' | 'wasm' | null> {
+  if (!forceWasm && (await mb.canEncodeAudio(codec))) return 'native';
   if (typeof WebAssembly !== 'object') return null;
   if (codec === 'mp3') {
     const { registerMp3Encoder } = await import('@mediabunny/mp3-encoder');

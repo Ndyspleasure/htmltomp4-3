@@ -7,13 +7,20 @@ import {
   MP4_VIDEO_CODECS,
   OUTPUT_MIME,
   VIDEO_EXPORT,
-  WEBM_VIDEO_CODECS,
   videoBitrateFor,
   type Mp4VideoCodec,
 } from '../../../config/converter-config';
 import { ConverterError } from '../errors';
 import type { OutputFormat } from '../types';
 import { ensureAudioEncoder, loadMediabunny, type ConvertResult } from './convert-media';
+import {
+  describeError,
+  trialEncodeAudio,
+  trialEncodeVideo,
+  videoEncoderCandidates,
+  type VideoEncoderCandidate,
+} from './encoder-fallback';
+import { MIX_SAMPLE_RATE } from '../render/audio-mix';
 import { assertOutputMatches, hasValidSignature, inspectOutput } from './output-validation';
 
 export interface MixedAudio {
@@ -60,35 +67,27 @@ export class FrameEncoder {
     const { width, height, fps } = config;
 
     let format: InstanceType<Mediabunny['OutputFormat']>;
-    let videoCodec: string | null = null;
+    let video: VideoEncoderCandidate | null = null;
     let limitedCompatibility = false;
     if (config.format === 'mp3') {
       format = new mb.Mp3OutputFormat();
-    } else if (config.format === 'webm') {
-      videoCodec = await mb.getFirstEncodableVideoCodec([...WEBM_VIDEO_CODECS], { width, height });
-      if (!videoCodec)
-        throw new ConverterError('codec-unavailable', 'Browser tidak memiliki encoder video untuk WebM.');
-      format = new mb.WebMOutputFormat();
     } else {
-      const meta = MP4_VIDEO_CODECS.find((entry) => entry.codec === config.mp4VideoCodec);
-      if (!(await mb.canEncodeVideo(config.mp4VideoCodec, { width, height }))) {
-        throw new ConverterError(
-          'codec-unavailable',
-          `Encoder ${meta?.label ?? config.mp4VideoCodec} tidak tersedia di browser ini. Pilih codec lain atau ekspor WebM.`,
-        );
-      }
-      videoCodec = config.mp4VideoCodec;
-      limitedCompatibility = meta?.limitedCompatibility ?? true;
-      format = new mb.Mp4OutputFormat({ fastStart: 'in-memory' });
+      video = await pickVideoEncoder(mb, config, notes);
+      const meta = MP4_VIDEO_CODECS.find((entry) => entry.codec === video?.codec);
+      limitedCompatibility = config.format === 'mp4' ? (meta?.limitedCompatibility ?? true) : false;
+      format =
+        config.format === 'webm' ? new mb.WebMOutputFormat() : new mb.Mp4OutputFormat({ fastStart: 'in-memory' });
     }
+    const videoCodec = video?.codec ?? null;
 
     const output = new mb.Output({ format, target: new mb.BufferTarget() });
     let videoSource: InstanceType<Mediabunny['VideoSampleSource']> | null = null;
-    if (videoCodec) {
+    if (video) {
       videoSource = new mb.VideoSampleSource({
-        codec: videoCodec as Parameters<Mediabunny['canEncodeVideo']>[0],
+        codec: video.codec,
         quality: new mb.Quality({ bitrate: videoBitrateFor(width, height, fps) }),
         keyFrameInterval: VIDEO_EXPORT.keyFrameIntervalSeconds,
+        hardwareAcceleration: video.hardwareAcceleration,
       });
       output.addVideoTrack(videoSource, { frameRate: fps });
     }
@@ -98,20 +97,14 @@ export class FrameEncoder {
     let peak = 0;
     if (config.audio) {
       audioCodec = config.format === 'mp3' ? 'mp3' : config.format === 'mp4' ? 'aac' : 'opus';
-      const provider =
-        audioCodec === 'opus'
-          ? (await mb.canEncodeAudio('opus'))
-            ? 'native'
-            : null
-          : await ensureAudioEncoder(mb, audioCodec);
-      if (!provider)
-        throw new ConverterError('codec-unavailable', `Encoder audio ${audioCodec.toUpperCase()} tidak tersedia.`);
       const bitrate =
         audioCodec === 'mp3'
           ? AUDIO_EXPORT.mp3BitrateBps
           : audioCodec === 'aac'
             ? AUDIO_EXPORT.aacBitrateBps
             : AUDIO_EXPORT.opusBitrateBps;
+      const sampleRate = config.audio === 'deferred' ? MIX_SAMPLE_RATE : config.audio.sampleRate;
+      await prepareAudioEncoder(mb, config.format, audioCodec, bitrate, sampleRate, notes);
       audioSource = new mb.AudioSampleSource({
         codec: audioCodec,
         quality: new mb.Quality({ bitrate, bitrateMode: 'constant' }),
@@ -206,6 +199,83 @@ export class FrameEncoder {
   async cancel(): Promise<void> {
     await this.output.cancel().catch(() => undefined);
   }
+}
+
+/**
+ * Picks the first video encoder that survives a real trial encode (see encoder-fallback.ts). A fallback
+ * away from the requested codec or from hardware encoding is reported to the user as a note.
+ */
+export async function pickVideoEncoder(
+  mb: Mediabunny,
+  config: FrameEncodeConfig,
+  notes: string[],
+): Promise<VideoEncoderCandidate> {
+  const { width, height, fps } = config;
+  const format = config.format === 'webm' ? 'webm' : 'mp4';
+  const requested = format === 'mp4' ? config.mp4VideoCodec : null;
+  const failures: string[] = [];
+  for (const candidate of videoEncoderCandidates(format, requested)) {
+    if (!(await mb.canEncodeVideo(candidate.codec, { width, height }).catch(() => false))) continue;
+    const error = await trialEncodeVideo(mb, format, candidate, width, height, fps);
+    if (!error) {
+      if (failures.length > 0 || (requested && candidate.codec !== requested))
+        notes.push(fallbackNote(candidate, requested, width, height));
+      return candidate;
+    }
+    failures.push(`${labelOf(candidate.codec)} (${candidate.hardwareAcceleration}): ${describeError(error)}`);
+  }
+  const label = requested ? labelOf(requested) : 'WebM';
+  throw new ConverterError(
+    'codec-unavailable',
+    failures.length > 0
+      ? `Encoder video browser ini gagal pada ${width}×${height} (${failures.join('; ')}). Coba resolusi lebih kecil atau browser lain (Chrome/Edge terbaru).`
+      : `Encoder ${label} tidak tersedia di browser ini. Pilih codec lain atau ekspor WebM.`,
+  );
+}
+
+function fallbackNote(
+  chosen: VideoEncoderCandidate,
+  requested: Mp4VideoCodec | null,
+  width: number,
+  height: number,
+): string {
+  if (requested && chosen.codec !== requested) {
+    return `Encoder ${labelOf(requested)} tidak tersedia atau gagal di browser ini pada ${width}×${height}; video dibuat dengan ${labelOf(chosen.codec)} (kompatibilitas pemutar lebih terbatas).`;
+  }
+  return `Encoder video hardware gagal pada ${width}×${height}; dipakai encoder software ${labelOf(chosen.codec)} (lebih lambat, hasil sama).`;
+}
+
+function labelOf(codec: string): string {
+  return MP4_VIDEO_CODECS.find((entry) => entry.codec === codec)?.label ?? codec.toUpperCase();
+}
+
+/** Makes sure the audio encoder works for real; a failing native AAC/MP3 encoder is swapped for the WASM one. */
+async function prepareAudioEncoder(
+  mb: Mediabunny,
+  format: OutputFormat,
+  codec: 'aac' | 'mp3' | 'opus',
+  bitrate: number,
+  sampleRate: number,
+  notes: string[],
+): Promise<void> {
+  const unavailable = () =>
+    new ConverterError('codec-unavailable', `Encoder audio ${codec.toUpperCase()} tidak tersedia.`);
+  const provider =
+    codec === 'opus' ? ((await mb.canEncodeAudio('opus')) ? 'native' : null) : await ensureAudioEncoder(mb, codec);
+  if (!provider) throw unavailable();
+  const error = await trialEncodeAudio(mb, format, codec, bitrate, sampleRate);
+  if (!error) return;
+  if (provider === 'native' && codec !== 'opus' && (await ensureAudioEncoder(mb, codec, true))) {
+    const retry = await trialEncodeAudio(mb, format, codec, bitrate, sampleRate);
+    if (!retry) {
+      notes.push(`Encoder audio ${codec.toUpperCase()} bawaan browser gagal; dipakai encoder WASM.`);
+      return;
+    }
+  }
+  throw new ConverterError(
+    'codec-unavailable',
+    `Encoder audio ${codec.toUpperCase()} browser ini gagal (${describeError(error)}). Coba matikan audio atau gunakan browser lain.`,
+  );
 }
 
 async function writeAudio(
