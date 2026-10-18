@@ -15,7 +15,8 @@ import { ConverterError } from '../errors';
 import type { OutputFormat } from '../types';
 import { assertOutputMatches, hasValidSignature, inspectOutput, type OutputInspection } from './output-validation';
 
-export type EncodeStage = 'loading-encoder' | 'reading-input' | 'encoding' | 'validating';
+export type EncodeStage =
+  'loading-encoder' | 'reading-input' | 'analyzing' | 'recording-audio' | 'rendering' | 'encoding' | 'validating';
 
 export interface EncoderSupport {
   webCodecs: boolean;
@@ -50,13 +51,13 @@ export type ProgressCallback = (stage: EncodeStage, fraction: number | null) => 
 type Mediabunny = typeof import('mediabunny');
 
 let mediabunnyPromise: Promise<Mediabunny> | null = null;
-function loadMediabunny(): Promise<Mediabunny> {
+export function loadMediabunny(): Promise<Mediabunny> {
   mediabunnyPromise ??= import('mediabunny');
   return mediabunnyPromise;
 }
 
 /** Registers WASM encoders only when the browser has no native one. Returns how the codec is provided. */
-async function ensureAudioEncoder(mb: Mediabunny, codec: 'aac' | 'mp3'): Promise<'native' | 'wasm' | null> {
+export async function ensureAudioEncoder(mb: Mediabunny, codec: 'aac' | 'mp3'): Promise<'native' | 'wasm' | null> {
   if (await mb.canEncodeAudio(codec)) return 'native';
   if (typeof WebAssembly !== 'object') return null;
   if (codec === 'mp3') {

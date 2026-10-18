@@ -1,15 +1,21 @@
 # HTML ke MP4 / MP3 Converter
 
 Website statis (Astro + TypeScript + Tailwind CSS) untuk mengimpor animasi HTML (`.html` atau proyek `.zip`), menampilkan
-preview terisolasi, merekam tab/jendela preview **dengan izin pengguna**, lalu mengekspor hasil yang sudah divalidasi ke
+preview terisolasi, lalu mengubahnya menjadi video/audio — langsung tanpa izin rekam layar, atau dengan merekam tab — dan mengekspor hasil yang sudah divalidasi ke
 **MP4**, **MP3**, atau **WebM**. Semua proses berjalan di browser; tidak ada file yang diunggah ke server. Siap di-deploy
 ke Vercel sebagai situs statis.
 
-> Alurnya **preview → rekam tab/jendela dengan izin → konversi → validasi → unduh**. HTML adalah dokumen yang dirender
-> browser, bukan file video, sehingga tidak ada janji bahwa setiap HTML bisa dikonversi otomatis. Detail desain ada di
+> Metode default **Konversi langsung**: unggah → konversi → unduh, tanpa dialog izin rekam layar. Animasi dijalankan
+> dengan jam virtual di sandbox tersembunyi, dirender frame demi frame, dan durasinya mengikuti animasi. Metode
+> **Rekam layar** (preview → rekam tab/jendela dengan izin → konversi → validasi → unduh) tetap tersedia sebagai cadangan.
+> HTML adalah dokumen yang dirender browser, bukan file video, sehingga tidak ada janji bahwa setiap HTML bisa dikonversi otomatis. Detail desain ada di
 > [`arsitektur.md`](arsitektur.md).
 
 ## Fitur
+
+- **Konversi langsung (default)**: tanpa izin rekam layar. Klik otomatis tombol “Putar/Play”, durasi otomatis
+  (deklarasi `<meta name="h2m:duration">`, GSAP/anime.js/Lottie/CSS, atau saat animasi berhenti berubah), audio dari
+  `<audio>/<video>` (mix offline) dan Web Audio (direkam real-time di sandbox), saran resolusi vertikal/persegi.
 
 - **Import aman**: `.html` (≤ 10 MB) atau `.zip` (≤ 25 MB, ≤ 500 file, ≤ 100 MB setelah ekstrak) dengan penolakan path
   traversal, path absolut, dan ZIP bomb. ZIP diekstrak di Web Worker. Pemilihan entry point bila `index.html` tidak ada.

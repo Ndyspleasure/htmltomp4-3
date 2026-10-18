@@ -17,7 +17,7 @@ const TRANSITIONS: Record<ConversionStatus, readonly ConversionStatus[]> = {
   idle: ['validating'],
   validating: ['preparing-preview', 'error'],
   'preparing-preview': ['ready-to-record', 'error'],
-  'ready-to-record': ['requesting-permission', 'preparing-preview', 'validating'],
+  'ready-to-record': ['requesting-permission', 'processing', 'preparing-preview', 'validating'],
   'requesting-permission': ['recording', 'ready-to-record', 'error'],
   recording: ['processing', 'cancelled', 'error'],
   processing: ['completed', 'cancelled', 'error'],

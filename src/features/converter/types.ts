@@ -16,7 +16,15 @@ export type ConversionStatus =
 
 export type CaptureMode = 'this-tab' | 'preview-window';
 
+/** direct = render frames in a hidden sandbox (no permission); capture = record a tab/window. */
+export type ConversionMethod = 'direct' | 'capture';
+
 export interface ConverterSettings {
+  method: ConversionMethod;
+  /** Follow the animation's own duration (detected) instead of `durationSeconds`. */
+  autoDuration: boolean;
+  /** Click a "Play/Putar" button at the start. */
+  autoStart: boolean;
   outputFormat: OutputFormat;
   resolutionId: ResolutionPresetId;
   width: number;

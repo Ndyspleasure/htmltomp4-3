@@ -96,6 +96,7 @@ test.describe('import & sandboxed preview', () => {
   test('opens a separate preview window that renders the same content', async ({ page, context }) => {
     await loadFixture(page, htmlFile());
     await waitForStatus(page, ['ready-to-record']);
+    await page.check('input[name="method"][value="capture"]');
     await page.check('input[name="captureMode"][value="preview-window"]');
     await expect(page.locator('[data-el="record"]')).toBeDisabled();
     const [popup] = await Promise.all([context.waitForEvent('page'), page.click('[data-el="open-window"]')]);

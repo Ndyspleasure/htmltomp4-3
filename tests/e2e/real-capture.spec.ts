@@ -8,7 +8,7 @@ test.describe('real tab capture (Chromium)', () => {
     await waitForStatus(page, ['ready-to-record']);
     const regionCapture = await page.evaluate(() => 'CropTarget' in window);
     test.skip(!regionCapture, 'Region Capture not available in this browser build');
-    await configure(page, { format: 'mp4', duration: 2, mode: 'this-tab' });
+    await configure(page, { method: 'capture', format: 'mp4', autoDuration: false, duration: 2, mode: 'this-tab' });
     await page.click('[data-el="record"]');
     await waitForStatus(page, ['recording', 'error']);
     await expectNoError(page);

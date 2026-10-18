@@ -12,19 +12,38 @@ import { formatBytes } from '../features/converter/format';
     <h1 class="text-3xl font-bold">Bantuan &amp; kompatibilitas</h1>
 
     <h2>Cara kerja</h2>
-    <p>
-      HTML adalah dokumen yang dirender browser, bukan file video. Karena itu converter ini bekerja dengan alur
-      <strong>preview → rekam tab/jendela dengan izin Anda → konversi → validasi → unduh</strong>. Tidak ada janji bahwa
-      setiap HTML dapat dikonversi secara otomatis.
-    </p>
-
-    <h2>Langkah</h2>
+    <p>HTML adalah dokumen yang dirender browser, bukan file video. Ada dua metode:</p>
     <ul>
       <li>
-        Pilih file <code>.html</code> atau <code>.zip</code> (ZIP harus berisi <code>index.html</code> atau pilih entry
-        point).
+        <strong>⚡ Konversi langsung (disarankan):</strong> unggah → klik “Konversi” → unduh. Animasi dijalankan di
+        latar belakang dengan jam virtual dan dirender frame demi frame, tanpa dialog izin rekam layar.
       </li>
-      <li>Periksa preview, pilih format (MP4, MP3, atau WebM), resolusi, FPS, dan durasi.</li>
+      <li>
+        <strong>🎥 Rekam layar:</strong> merekam tab/jendela preview dengan izin Anda. Pakai bila hasil konversi
+        langsung tidak tampil benar (mis. WebGL berat atau konten yang sangat interaktif).
+      </li>
+    </ul>
+
+    <h2>Durasi otomatis</h2>
+    <ul>
+      <li>
+        Dengan “Ikuti durasi animasi”, render berhenti ketika animasi selesai: dari timing GSAP/anime.js/Lottie/CSS,
+        atau saat halaman berhenti berubah selama 2 detik.
+      </li>
+      <li>
+        Ingin durasi pasti? Tambahkan <code>&lt;meta name="h2m:duration" content="30"&gt;</code> di HTML Anda.
+      </li>
+      <li>Animasi yang berulang terus (loop) memakai durasi yang Anda isi.</li>
+    </ul>
+
+    <h2>Tombol “Putar/Play”</h2>
+    <p>
+      Banyak animasi menunggu klik sebelum mulai (juga agar audio boleh diputar). Opsi “Klik otomatis tombol Putar/Play”
+      menekan tombol tersebut tepat di awal video.
+    </p>
+
+    <h2>Langkah rekam layar</h2>
+    <ul>
       <li>
         <strong>Tab ini:</strong> klik “Mulai Rekam” lalu pilih “Tab ini”; hanya area preview yang direkam (Chrome/Edge
         desktop).
@@ -34,7 +53,6 @@ import { formatBytes } from '../features/converter/format';
         lalu pilih tab “Preview Rekaman”.
       </li>
       <li>Untuk audio/MP3 aktifkan “Bagikan audio tab” di dialog izin.</li>
-      <li>Rekaman berhenti otomatis setelah durasi yang Anda pilih atau saat Anda menekan “Berhenti”.</li>
     </ul>
 
     <h2>Batas</h2>
@@ -86,6 +104,11 @@ import { formatBytes } from '../features/converter/format';
         <code>new URL(..., import.meta.url)</code>, Worker) bisa gagal.
       </li>
       <li>Kualitas mengikuti resolusi tangkapan. Untuk resolusi penuh gunakan jendela preview terpisah.</li>
+      <li>
+        Konversi langsung memotret DOM per frame; efek seperti <code>backdrop-filter</code>, iframe di dalam animasi,
+        atau gambar/font lintas origin tanpa CORS bisa tampil berbeda. Suara sintetis (<code>speechSynthesis</code>)
+        tidak dapat direkam browser.
+      </li>
       <li>
         Audio harus berbunyi saat direkam. Jika animasi memerlukan klik untuk memulai audio, klik di dalam preview
         setelah perekaman dimulai.

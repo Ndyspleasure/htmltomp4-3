@@ -21,15 +21,18 @@ import {
   type EncodeStage,
   type EncoderSupport,
 } from '../export/encoder-client';
-import { bestMp4Codec, formatAvailability } from '../export/export-options';
+import { bestMp4Codec, directFormatAvailability, formatAvailability } from '../export/export-options';
 import { buildOutputFileName, formatBytes, formatDuration } from '../format';
 import { importSource } from '../import/import-source';
 import { readZipInWorker } from '../import/zip-client';
 import { buildPreviewBundle } from '../preview/build-bundle';
 import { mountPreview, type PreviewController } from '../preview/mount-preview';
+import { renderDirect } from '../render/render-direct';
+import type { DetectedTiming } from '../render/sandbox-protocol';
 import { StatusMachine, controlsFor } from '../state/state-machine';
 import type {
   CaptureMode,
+  ConversionMethod,
   ConversionResult,
   ConversionStatus,
   ConverterSettings,
@@ -44,10 +47,10 @@ const STATUS_LABELS: Record<ConversionStatus, string> = {
   idle: 'Menunggu file.',
   validating: 'Memvalidasi file…',
   'preparing-preview': 'Menyiapkan preview…',
-  'ready-to-record': 'Siap merekam.',
+  'ready-to-record': 'Siap dikonversi.',
   'requesting-permission': 'Menunggu izin perekaman dari browser…',
   recording: 'Sedang merekam.',
-  processing: 'Memproses rekaman…',
+  processing: 'Memproses…',
   completed: 'Selesai. File siap diunduh.',
   cancelled: 'Dibatalkan.',
   error: 'Terjadi kesalahan.',
@@ -56,6 +59,9 @@ const STATUS_LABELS: Record<ConversionStatus, string> = {
 const STAGE_LABELS: Record<EncodeStage, string> = {
   'loading-encoder': 'Menyiapkan encoder…',
   'reading-input': 'Membaca rekaman…',
+  analyzing: 'Menganalisis animasi dan durasi…',
+  'recording-audio': 'Merekam audio animasi (real-time)…',
+  rendering: 'Merender frame',
   encoding: 'Mengonversi',
   validating: 'Memvalidasi hasil…',
 };
@@ -102,6 +108,13 @@ export function initConverterApp(doc: Document): void {
     resolutionField: q(doc, 'resolution-field'),
     fpsField: q(doc, 'fps-field'),
     modeThisTab: q(doc, 'mode-this-tab'),
+    captureModeField: q(doc, 'capture-mode-field'),
+    restartField: q(doc, 'restart-field'),
+    durationDetected: q(doc, 'duration-detected'),
+    layoutHint: q(doc, 'layout-hint'),
+    layoutHintText: q(doc, 'layout-hint-text'),
+    layoutApply: q<HTMLButtonElement>(doc, 'layout-apply'),
+    recordTitle: q(doc, 'record-title'),
     capabilityList: q(doc, 'capability-list'),
     recordGuide: q(doc, 'record-guide'),
     record: q<HTMLButtonElement>(doc, 'record'),
@@ -150,6 +163,10 @@ export function initConverterApp(doc: Document): void {
   let importToken = 0;
   /** Warnings from the import step, shown together with preview warnings. */
   let importWarningsCache: string[] = [];
+  /** Duration/layout detected in the live preview (null until reported). */
+  let detectedTiming: DetectedTiming | null = null;
+  /** True once the user picked a resolution themselves; then layout suggestions are only offered. */
+  let resolutionTouched = false;
 
   // ---------- settings ----------
 
@@ -169,7 +186,7 @@ export function initConverterApp(doc: Document): void {
     const frameRate: FrameRate = (FRAME_RATES as readonly number[]).includes(fps)
       ? (fps as FrameRate)
       : DEFAULT_SETTINGS.frameRate;
-    const rawDuration = Math.round(Number(field('durationSeconds')));
+    const rawDuration = Math.round(Number(field('durationSeconds')) * 10) / 10;
     const durationSeconds = Number.isFinite(rawDuration)
       ? Math.min(RECORDING_LIMITS.maxDurationSeconds, Math.max(RECORDING_LIMITS.minDurationSeconds, rawDuration))
       : DEFAULT_SETTINGS.durationSeconds;
@@ -178,7 +195,11 @@ export function initConverterApp(doc: Document): void {
     const codec = field('mp4VideoCodec');
     const mp4VideoCodec: Mp4VideoCodec = MP4_VIDEO_CODECS.find((c) => c.codec === codec)?.codec ?? 'avc';
     const captureMode: CaptureMode = field('captureMode') === 'this-tab' ? 'this-tab' : 'preview-window';
+    const method: ConversionMethod = field('method') === 'capture' ? 'capture' : 'direct';
     return {
+      method,
+      autoDuration: checked('autoDuration'),
+      autoStart: checked('autoStart'),
       outputFormat,
       resolutionId: preset.id as ResolutionPresetId,
       width: preset.width,
@@ -221,13 +242,14 @@ export function initConverterApp(doc: Document): void {
     const controls = controlsFor(status);
     const settings = readSettings();
     const availability = support ? currentAvailability(settings) : null;
-    const windowReady = settings.captureMode === 'this-tab' || popup?.ready === true;
+    const direct = settings.method === 'direct';
+    const windowReady = direct || settings.captureMode === 'this-tab' || popup?.ready === true;
 
     ui.fileInput.disabled = !controls.canPickFile;
     ui.reset.disabled = status === 'recording' || status === 'processing' || status === 'requesting-permission';
     ui.entrySelect.disabled = !controls.canRestartPreview;
     ui.restartPreview.disabled = !preview || !controls.canRestartPreview;
-    ui.openWindow.disabled = !bundle || !controls.canRestartPreview;
+    ui.openWindow.disabled = !bundle || !controls.canRestartPreview || direct;
     ui.settings.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select').forEach((field) => {
       if (field.dataset['locked'] === 'true') return;
       field.disabled = !(controls.canEditSettings || status === 'idle');
@@ -235,9 +257,20 @@ export function initConverterApp(doc: Document): void {
     applyFormatLocks();
     ui.record.disabled = !(controls.canRecord && bundle && availability?.available && windowReady);
     ui.stop.disabled = !controls.canStop;
+    ui.stop.classList.toggle('hidden', direct);
+    ui.captureModeField.classList.toggle('hidden', direct);
+    ui.restartField.classList.toggle('hidden', direct);
+    const durationInput = ui.settings.querySelector<HTMLInputElement>('input[name="durationSeconds"]');
+    if (durationInput && settings.autoDuration && direct) durationInput.disabled = true;
+    ui.recordTitle.textContent = direct ? 'Konversi' : 'Rekam';
+    const label = settings.outputFormat.toUpperCase();
+    ui.record.textContent = direct ? `⚡ Konversi ke ${label}` : '● Mulai Rekam';
+    ui.recordAgain.textContent = direct ? 'Konversi ulang' : 'Rekam ulang';
     ui.cancel.disabled = !controls.canCancel;
     ui.cancelProcessing.disabled = status !== 'processing';
-    ui.reexport.disabled = !(recording && (status === 'completed' || status === 'error' || status === 'cancelled'));
+    ui.reexport.disabled =
+      direct || !(recording && (status === 'completed' || status === 'error' || status === 'cancelled'));
+    ui.reexport.classList.toggle('hidden', direct);
     ui.recordAgain.disabled = !controls.canRecord;
     ui.recordingStatus.classList.toggle('hidden', status !== 'recording');
     ui.progressSection.classList.toggle('hidden', status !== 'processing');
@@ -246,6 +279,8 @@ export function initConverterApp(doc: Document): void {
 
   function currentAvailability(settings: ConverterSettings) {
     if (!support) return { available: false, reason: 'Memeriksa kemampuan encoder…' };
+    if (settings.method === 'direct')
+      return directFormatAvailability(settings.outputFormat, support, canRenderDirect());
     return formatAvailability(
       settings.outputFormat,
       support,
@@ -267,12 +302,15 @@ export function initConverterApp(doc: Document): void {
     }
     if (support) {
       ui.settings.querySelectorAll<HTMLInputElement>('input[name="outputFormat"]').forEach((radio) => {
-        const result = formatAvailability(
-          radio.value as OutputFormat,
-          support as EncoderSupport,
-          { video: caps.recorderVideoMime, audio: caps.recorderAudioMime },
-          caps.displayCapture && caps.secureContext,
-        );
+        const result =
+          settings.method === 'direct'
+            ? directFormatAvailability(radio.value as OutputFormat, support as EncoderSupport, canRenderDirect())
+            : formatAvailability(
+                radio.value as OutputFormat,
+                support as EncoderSupport,
+                { video: caps.recorderVideoMime, audio: caps.recorderAudioMime },
+                caps.displayCapture && caps.secureContext,
+              );
         radio.title = result.available ? '' : (result.reason ?? '');
       });
       const select = ui.settings.querySelector<HTMLSelectElement>('select[name="mp4VideoCodec"]');
@@ -293,7 +331,11 @@ export function initConverterApp(doc: Document): void {
         );
       }
       if (settings.outputFormat === 'mp3')
-        notes.push('MP3 membutuhkan audio tab. Centang “Bagikan audio tab” di dialog izin.');
+        notes.push(
+          settings.method === 'direct'
+            ? 'MP3 berisi audio yang diputar animasi (elemen audio/video atau Web Audio).'
+            : 'MP3 membutuhkan audio tab. Centang “Bagikan audio tab” di dialog izin.',
+        );
       if (settings.outputFormat === 'webm')
         notes.push('WebM adalah alternatif jujur bila MP4 tidak dapat dibuat di browser ini.');
       ui.formatNote.textContent = notes.join(' ');
@@ -301,6 +343,18 @@ export function initConverterApp(doc: Document): void {
   }
 
   function renderGuide(settings: ConverterSettings): void {
+    if (settings.method === 'direct') {
+      ui.recordGuide.replaceChildren(
+        ...[
+          `Klik “Konversi ke ${settings.outputFormat.toUpperCase()}”. Tidak ada dialog izin.`,
+          settings.autoDuration
+            ? 'Durasi mengikuti animasi: render berhenti saat animasi selesai.'
+            : `Durasi: ${settings.durationSeconds} detik.`,
+          'Tunggu sampai tombol unduh muncul. Tab boleh tetap terbuka di latar depan.',
+        ].map((text) => listItem(text)),
+      );
+      return;
+    }
     const steps =
       settings.captureMode === 'this-tab'
         ? [
@@ -395,6 +449,8 @@ export function initConverterApp(doc: Document): void {
     sourceResources.release('preview');
     sourceResources.release('popup');
     renderList(ui.previewErrors, []);
+    detectedTiming = null;
+    ui.layoutHint.classList.add('hidden');
     const built = buildPreviewBundle(source, entryPath);
     bundle = built;
     renderList(ui.importWarnings, [...importWarningsCache, ...built.warnings]);
@@ -407,6 +463,7 @@ export function initConverterApp(doc: Document): void {
         if (event.type === 'runtime-error') appendPreviewError(`Error JavaScript di animasi: ${event.message}`);
         if (event.type === 'loaded')
           renderList(ui.importWarnings, [...importWarningsCache, ...built.warnings, ...event.warnings]);
+        if (event.type === 'timing') applyDetectedTiming(event.timing);
       },
     });
     preview = controller;
@@ -493,6 +550,155 @@ export function initConverterApp(doc: Document): void {
       );
     ui.compatBanner.textContent = problems.join(' ');
     ui.compatBanner.classList.toggle('hidden', problems.length === 0);
+  }
+
+  // ---------- detected timing & layout ----------
+
+  function canRenderDirect(): boolean {
+    return typeof createImageBitmap === 'function' && typeof OfflineAudioContext === 'function' && caps.worker;
+  }
+
+  function applyDetectedTiming(timing: DetectedTiming): void {
+    detectedTiming = timing;
+    renderDetectedDuration();
+    const presetId = timing.layout === 'portrait' ? '1080x1920' : timing.layout === 'square' ? '1080x1080' : null;
+    const current = readSettings();
+    const preset = RESOLUTION_PRESETS.find((p) => p.id === presetId);
+    const mismatched =
+      preset &&
+      ((timing.layout === 'portrait' && current.width >= current.height) ||
+        (timing.layout === 'square' && current.width !== current.height));
+    const shape = timing.layout === 'portrait' ? 'vertikal (9:16)' : 'persegi (1:1)';
+    if (preset && mismatched && !resolutionTouched) {
+      // Nobody chose a size yet: follow the animation's shape so "upload → convert" just works.
+      selectResolution(preset.id);
+      ui.layoutHintText.textContent = `Animasi terlihat ${shape}; resolusi otomatis diubah ke ${preset.label}. Anda bisa menggantinya.`;
+      ui.layoutApply.classList.add('hidden');
+      ui.layoutHint.classList.remove('hidden');
+      return;
+    }
+    ui.layoutHint.classList.toggle('hidden', !mismatched);
+    ui.layoutApply.classList.remove('hidden');
+    if (preset && mismatched) {
+      ui.layoutHintText.textContent = `Animasi terlihat ${shape}. Disarankan resolusi ${preset.label}.`;
+      ui.layoutApply.dataset['preset'] = preset.id;
+    }
+  }
+
+  function renderDetectedDuration(): void {
+    const settings = readSettings();
+    if (!detectedTiming) {
+      ui.durationDetected.textContent = bundle ? 'Mendeteksi durasi animasi…' : '';
+      return;
+    }
+    const { durationSeconds, looping, sources } = detectedTiming;
+    let text: string;
+    if (settings.method === 'direct' && settings.autoDuration) {
+      text =
+        durationSeconds !== null
+          ? `Perkiraan dari preview: ${durationSeconds.toFixed(1)} detik. Durasi pasti dihitung saat konversi (render berhenti ketika animasi selesai).`
+          : 'Durasi dihitung otomatis saat konversi: render berhenti ketika animasi selesai.';
+    } else if (durationSeconds !== null) {
+      text = `Terdeteksi di preview: ${durationSeconds.toFixed(1)} detik (${sources.join(', ') || 'animasi'}).`;
+      if (settings.autoDuration) setDurationField(durationSeconds);
+    } else if (looping) {
+      text = 'Animasi berulang terus; durasi di atas yang dipakai.';
+    } else {
+      text = 'Durasi tidak terdeteksi otomatis; durasi di atas yang dipakai.';
+    }
+    ui.durationDetected.textContent = text;
+  }
+
+  function setDurationField(seconds: number): void {
+    const input = ui.settings.querySelector<HTMLInputElement>('input[name="durationSeconds"]');
+    if (input)
+      input.value = String(
+        Math.min(RECORDING_LIMITS.maxDurationSeconds, Math.max(RECORDING_LIMITS.minDurationSeconds, seconds)),
+      );
+  }
+
+  function selectResolution(presetId: string): void {
+    const select = ui.settings.querySelector<HTMLSelectElement>('select[name="resolutionId"]');
+    if (!select || select.value === presetId) return;
+    select.value = presetId;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // ---------- direct conversion ----------
+
+  async function runDirectConversion(): Promise<void> {
+    if (!bundle) return;
+    clearError();
+    const settings = readSettings();
+    const availability = currentAvailability(settings);
+    if (!availability.available) {
+      showError(new ConverterError('codec-unavailable', availability.reason ?? 'Format tidak tersedia.'));
+      return;
+    }
+    hideResult();
+    runResources.releaseAll();
+    recording = null;
+    setStatus('processing');
+    const abort = new AbortController();
+    processingAbort = abort;
+    setProgress('analyzing', null, settings.outputFormat);
+    try {
+      const outcome = await renderDirect({
+        bundle,
+        format: settings.outputFormat,
+        width: settings.width,
+        height: settings.height,
+        fps: settings.frameRate,
+        durationSeconds: settings.autoDuration ? null : settings.durationSeconds,
+        fallbackSeconds: settings.durationSeconds,
+        includeAudio: settings.includeAudio,
+        autoStart: settings.autoStart,
+        mp4VideoCodec: settings.mp4VideoCodec,
+        encoder,
+        signal: abort.signal,
+        onProgress: (stage, fraction, detail) => setProgress(stage, fraction, settings.outputFormat, detail),
+      });
+      if (settings.autoDuration) setDurationField(outcome.durationSeconds);
+      const notes = [...outcome.warnings, ...outcome.result.notes];
+      if (settings.autoDuration && outcome.timing.durationSeconds !== null) {
+        notes.unshift(
+          `Durasi mengikuti animasi: ${outcome.durationSeconds.toFixed(1)} detik (${outcome.timing.sources.join(', ')}).`,
+        );
+      }
+      showResult(toConversionResult({ ...outcome.result, notes }, settings.outputFormat));
+      setStatus('completed');
+    } catch (error) {
+      if (isConverterError(error) && error.code === 'encoding-cancelled') {
+        setStatus('cancelled');
+        ui.statusText.textContent = 'Konversi dibatalkan.';
+      } else {
+        showError(error);
+        setStatus('error');
+      }
+    } finally {
+      processingAbort = null;
+    }
+  }
+
+  function toConversionResult(converted: ConvertResult, format: OutputFormat): ConversionResult {
+    return {
+      blob: new Blob([converted.buffer], { type: converted.mimeType }),
+      fileName: buildOutputFileName(source?.name ?? 'animasi', format),
+      mimeType: converted.mimeType,
+      sizeBytes: converted.buffer.byteLength,
+      durationSeconds: converted.inspection.durationSeconds,
+      ...(converted.inspection.video
+        ? {
+            width: converted.inspection.video.width,
+            height: converted.inspection.video.height,
+            videoCodec: converted.inspection.video.codec ?? '-',
+          }
+        : {}),
+      ...(converted.inspection.audio ? { audioCodec: converted.inspection.audio.codec ?? '-' } : {}),
+      ...(converted.audioSilent !== null ? { audioSilent: converted.audioSilent } : {}),
+      limitedCompatibility: converted.limitedCompatibility,
+      notes: converted.notes,
+    };
   }
 
   // ---------- preview window ----------
@@ -742,25 +948,7 @@ export function initConverterApp(doc: Document): void {
         );
         converted.notes.push('Web Worker tidak tersedia; konversi dijalankan di thread utama.');
       }
-      const extension = settings.outputFormat;
-      const result: ConversionResult = {
-        blob: new Blob([converted.buffer], { type: converted.mimeType }),
-        fileName: buildOutputFileName(source?.name ?? 'animasi', extension),
-        mimeType: converted.mimeType,
-        sizeBytes: converted.buffer.byteLength,
-        durationSeconds: converted.inspection.durationSeconds,
-        ...(converted.inspection.video
-          ? {
-              width: converted.inspection.video.width,
-              height: converted.inspection.video.height,
-              videoCodec: converted.inspection.video.codec ?? '-',
-            }
-          : {}),
-        ...(converted.inspection.audio ? { audioCodec: converted.inspection.audio.codec ?? '-' } : {}),
-        ...(converted.audioSilent !== null ? { audioSilent: converted.audioSilent } : {}),
-        limitedCompatibility: converted.limitedCompatibility,
-        notes: converted.notes,
-      };
+      const result = toConversionResult(converted, settings.outputFormat);
       if (rec.captureWidth && rec.captureHeight && settings.outputFormat !== 'mp3') {
         if (rec.captureWidth < settings.width * 0.9 || rec.captureHeight < settings.height * 0.9) {
           result.notes.push(
@@ -783,9 +971,10 @@ export function initConverterApp(doc: Document): void {
     }
   }
 
-  function setProgress(stage: EncodeStage, fraction: number | null, format: OutputFormat): void {
+  function setProgress(stage: EncodeStage, fraction: number | null, format: OutputFormat, detail?: string): void {
     const what = format === 'mp3' ? 'audio ke MP3' : `video ke ${format.toUpperCase()}`;
-    const label = stage === 'encoding' ? `${STAGE_LABELS.encoding} ${what}…` : STAGE_LABELS[stage];
+    let label = stage === 'encoding' ? `${STAGE_LABELS.encoding} ${what}…` : STAGE_LABELS[stage];
+    if (detail) label += ` (${detail})`;
     if (fraction === null) {
       ui.progressStage.textContent = label;
       ui.progressBar.style.width = '100%';
@@ -874,6 +1063,9 @@ export function initConverterApp(doc: Document): void {
     bundle = null;
     recording = null;
     importWarningsCache = [];
+    detectedTiming = null;
+    ui.layoutHint.classList.add('hidden');
+    ui.durationDetected.textContent = '';
     ui.fileInfo.classList.add('hidden');
     renderList(ui.importWarnings, []);
     renderList(ui.previewErrors, []);
@@ -940,6 +1132,7 @@ export function initConverterApp(doc: Document): void {
       target.value = String(settings.durationSeconds);
     }
     if (target?.name === 'resolutionId') {
+      if (event.isTrusted) resolutionTouched = true;
       const settings = readSettings();
       preview?.setViewport(settings.width, settings.height);
       if (popup && !popup.win.closed) {
@@ -950,13 +1143,25 @@ export function initConverterApp(doc: Document): void {
       }
       ui.previewMeta.textContent = `Viewport ${settings.width}×${settings.height}px · entry: ${bundle?.entryPath ?? '-'}`;
       if (bundle) void refreshSupport();
+      if (detectedTiming && event.isTrusted) applyDetectedTiming(detectedTiming);
     }
+    renderDetectedDuration();
     updateControls();
   });
   ui.settings.addEventListener('submit', (event) => event.preventDefault());
 
-  ui.record.addEventListener('click', () => void startRecordingFlow());
-  ui.recordAgain.addEventListener('click', () => void startRecordingFlow());
+  const startConversion = () => {
+    if (readSettings().method === 'direct') void runDirectConversion();
+    else void startRecordingFlow();
+  };
+  ui.record.addEventListener('click', startConversion);
+  ui.recordAgain.addEventListener('click', startConversion);
+  ui.layoutApply.addEventListener('click', () => {
+    const presetId = ui.layoutApply.dataset['preset'];
+    if (!presetId) return;
+    selectResolution(presetId);
+    ui.layoutHint.classList.add('hidden');
+  });
   ui.stop.addEventListener('click', () => recordingSession?.stop());
   ui.cancel.addEventListener('click', () => {
     if (machine.status === 'recording') recordingSession?.cancel();

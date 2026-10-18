@@ -16,7 +16,7 @@ test.describe('record → encode → validate → download', () => {
     await installFakeDisplayMedia(page);
     await loadFixture(page, htmlFile());
     await waitForStatus(page, ['ready-to-record']);
-    await configure(page, { format: 'mp4', duration: 2, mode: 'this-tab' });
+    await configure(page, { method: 'capture', format: 'mp4', autoDuration: false, duration: 2, mode: 'this-tab' });
     await expect(page.locator('[data-el="record"]')).toBeEnabled();
     await page.click('[data-el="record"]');
     await waitForStatus(page, ['completed', 'error']);
@@ -40,7 +40,7 @@ test.describe('record → encode → validate → download', () => {
     await installFakeDisplayMedia(page);
     await loadFixture(page, htmlFile());
     await waitForStatus(page, ['ready-to-record']);
-    await configure(page, { format: 'mp3', duration: 2 });
+    await configure(page, { method: 'capture', format: 'mp3', autoDuration: false, duration: 2 });
     await page.click('[data-el="record"]');
     await waitForStatus(page, ['completed', 'error']);
     await expectNoError(page);
@@ -58,7 +58,7 @@ test.describe('record → encode → validate → download', () => {
     await installFakeDisplayMedia(page);
     await loadFixture(page, htmlFile());
     await waitForStatus(page, ['ready-to-record']);
-    await configure(page, { format: 'webm', duration: 2, includeAudio: false });
+    await configure(page, { method: 'capture', format: 'webm', autoDuration: false, duration: 2, includeAudio: false });
     await page.click('[data-el="record"]');
     await waitForStatus(page, ['completed', 'error']);
     await expectNoError(page);
@@ -72,10 +72,10 @@ test.describe('record → encode → validate → download', () => {
     await installFakeDisplayMedia(page);
     await loadFixture(page, htmlFile());
     await waitForStatus(page, ['ready-to-record']);
-    await configure(page, { format: 'mp4', duration: 2 });
+    await configure(page, { method: 'capture', format: 'mp4', autoDuration: false, duration: 2 });
     await page.click('[data-el="record"]');
     await waitForStatus(page, ['completed']);
-    await configure(page, { format: 'mp3' });
+    await configure(page, { method: 'capture', format: 'mp3' });
     await page.click('[data-el="reexport"]');
     await waitForStatus(page, ['processing'], 10_000).catch(() => undefined);
     await waitForStatus(page, ['completed', 'error']);
@@ -88,6 +88,7 @@ test.describe('record → encode → validate → download', () => {
     await installFakeDisplayMedia(page, { deny: true });
     await loadFixture(page, htmlFile());
     await waitForStatus(page, ['ready-to-record']);
+    await configure(page, { method: 'capture', autoDuration: false, duration: 2 });
     await page.click('[data-el="record"]');
     await waitForStatus(page, ['error']);
     await expect(page.locator('[data-el="global-error"]')).toContainText('Izin merekam ditolak');
@@ -99,7 +100,7 @@ test.describe('record → encode → validate → download', () => {
     await installFakeDisplayMedia(page, { audio: false });
     await loadFixture(page, htmlFile());
     await waitForStatus(page, ['ready-to-record']);
-    await configure(page, { format: 'mp3', duration: 2 });
+    await configure(page, { method: 'capture', format: 'mp3', autoDuration: false, duration: 2 });
     await page.click('[data-el="record"]');
     await waitForStatus(page, ['error']);
     await expect(page.locator('[data-el="global-error"]')).toContainText('MP3 tidak dapat dibuat');
@@ -110,7 +111,7 @@ test.describe('record → encode → validate → download', () => {
     await installFakeDisplayMedia(page);
     await loadFixture(page, htmlFile());
     await waitForStatus(page, ['ready-to-record']);
-    await configure(page, { duration: 30 });
+    await configure(page, { method: 'capture', autoDuration: false, duration: 30 });
     await page.click('[data-el="record"]');
     await waitForStatus(page, ['recording']);
     await expect(page.locator('[data-el="recording-status"]')).toBeVisible();
@@ -124,7 +125,13 @@ test.describe('record → encode → validate → download', () => {
     await installFakeDisplayMedia(page);
     await loadFixture(page, htmlFile());
     await waitForStatus(page, ['ready-to-record']);
-    await configure(page, { format: 'webm', duration: 60, includeAudio: false });
+    await configure(page, {
+      method: 'capture',
+      format: 'webm',
+      autoDuration: false,
+      duration: 60,
+      includeAudio: false,
+    });
     await page.click('[data-el="record"]');
     await waitForStatus(page, ['recording']);
     await page.waitForTimeout(1500);

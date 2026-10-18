@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 — Konversi langsung
+
+- **Konversi langsung (default):** unggah → konversi → unduh tanpa dialog izin rekam layar. Animasi dirender frame demi
+  frame di sandbox tersembunyi dengan jam virtual, lalu di-encode di Web Worker.
+- **Durasi otomatis:** mengikuti durasi animasi (deklarasi `h2m:duration`, GSAP/anime.js/Lottie/CSS, atau saat halaman
+  berhenti berubah). Animasi yang berulang terus memakai durasi yang diisi, dengan pemberitahuan.
+- **Klik otomatis tombol “Putar/Play”** untuk animasi yang menunggu klik.
+- **Audio tanpa izin:** `<audio>/<video>` di-mix offline; Web Audio direkam real-time di dalam sandbox.
+- **Saran resolusi** vertikal (1080×1920) / persegi saat konten terdeteksi berbentuk demikian.
+- Rekam layar tetap tersedia sebagai metode cadangan; durasinya juga bisa mengikuti deteksi preview.
+
 ## 0.1.0 — MVP
 
 - Website statis Astro + TypeScript + Tailwind CSS, siap deploy ke Vercel (`vercel.json` dengan header keamanan).

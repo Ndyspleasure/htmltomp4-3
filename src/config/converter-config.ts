@@ -44,7 +44,7 @@ export const FRAME_RATES = [24, 30, 60] as const;
 export type FrameRate = (typeof FRAME_RATES)[number];
 
 export const RECORDING_LIMITS = {
-  minDurationSeconds: 1,
+  minDurationSeconds: 0.5,
   maxDurationSeconds: 300,
   defaultDurationSeconds: 10,
   /** MediaRecorder timeslice; small chunks keep progress responsive and limit data loss on errors. */
@@ -55,6 +55,9 @@ export const RECORDING_LIMITS = {
 } as const;
 
 export const DEFAULT_SETTINGS = {
+  method: 'direct',
+  autoDuration: true,
+  autoStart: true,
   outputFormat: 'mp4',
   resolutionId: '1280x720',
   frameRate: 30,
