@@ -25,6 +25,8 @@ export interface ConverterSettings {
   autoDuration: boolean;
   /** Click a "Play/Putar" button at the start. */
   autoStart: boolean;
+  /** Direct method: capture only the detected stage element (no page background or player controls). */
+  cropToStage: boolean;
   outputFormat: OutputFormat;
   resolutionId: ResolutionPresetId;
   width: number;

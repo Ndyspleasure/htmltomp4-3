@@ -1,6 +1,6 @@
 {
   "name": "html-to-mp4-mp3-converter",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Static web app that records HTML animations in the browser and exports validated MP4/MP3/WebM files. Deploys to Vercel.",
   "type": "module",

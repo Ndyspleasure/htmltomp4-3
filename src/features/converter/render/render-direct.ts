@@ -24,6 +24,8 @@ export interface DirectRenderOptions {
   includeAudio: boolean;
   /** Click a "Play/Putar" button at t=0 when the page waits for one. */
   autoStart: boolean;
+  /** Capture only the animation's stage element instead of the whole page. */
+  cropToStage: boolean;
   mp4VideoCodec: Mp4VideoCodec;
   encoder: EncoderClient;
   onProgress: (stage: EncodeStage, fraction: number | null, detail?: string) => void;
@@ -73,59 +75,79 @@ export async function renderDirect(options: DirectRenderOptions): Promise<Direct
 
     if (analysis.clickedStart) warnings.push(`Tombol "${analysis.clickedStart}" diklik otomatis di awal.`);
 
-    const sessions: AudioSession[] = [...analysis.audio];
-    if (wantAudio && analysis.webAudioUsed) {
-      // Web Audio can only be captured in real time: play the document once more and record its output.
-      options.onProgress('recording-audio', null, `${durationSeconds} detik`);
+    const mediaSessions: AudioSession[] = [...analysis.audio];
+    const needsLiveAudio = wantAudio && analysis.webAudioUsed;
+    // Web Audio can only be captured in real time: play the document once more and record its output.
+    const recordLiveAudio = async (): Promise<AudioSession[]> => {
       const audioFrame = await openRenderFrame(bundle, width, height, 'audio');
       frames.push(audioFrame);
       const captures = await audioFrame.recordAudio({ durationSeconds, autoStart: options.autoStart });
       audioFrame.destroy();
+      return captures.map((capture) => ({
+        data: capture.data,
+        startSeconds: Math.max(0, capture.startSeconds),
+        offsetSeconds: Math.max(0, -capture.startSeconds),
+        stopSeconds: null,
+        volume: 1,
+        loop: false,
+        playbackRate: 1,
+      }));
+    };
+    const buildAudio = async () => {
+      const live = needsLiveAudio ? await recordLiveAudio() : [];
+      return mixAudioSessions([...mediaSessions, ...live], durationSeconds, warnings);
+    };
+    const encoderConfig = { format, width, height, fps, mp4VideoCodec: options.mp4VideoCodec, durationSeconds };
+    const onEncoderProgress = (stage: EncodeStage, fraction: number | null) => options.onProgress(stage, fraction);
+
+    let session: ReturnType<EncoderClient['beginFrames']>;
+    if (format === 'mp3') {
+      if (needsLiveAudio) options.onProgress('recording-audio', null, `${durationSeconds} detik`);
+      const audio = await buildAudio();
       checkAborted();
-      for (const capture of captures) {
-        sessions.push({
-          data: capture.data,
-          startSeconds: Math.max(0, capture.startSeconds),
-          offsetSeconds: Math.max(0, -capture.startSeconds),
-          stopSeconds: null,
-          volume: 1,
-          loop: false,
-          playbackRate: 1,
-        });
+      if (!audio) {
+        throw new ConverterError(
+          'no-audio-track',
+          'Animasi tidak memutar audio yang dapat direkam (elemen <audio>/<video> atau Web Audio), sehingga MP3 tidak dapat dibuat.',
+        );
       }
-    }
-    const audio = wantAudio ? await mixAudioSessions(sessions, durationSeconds, warnings) : null;
-    if (format === 'mp3' && !audio) {
-      throw new ConverterError(
-        'no-audio-track',
-        'Animasi tidak memutar audio yang dapat direkam (elemen <audio>/<video> atau Web Audio), sehingga MP3 tidak dapat dibuat.',
+      session = options.encoder.beginFrames({ ...encoderConfig, audio }, onEncoderProgress, signal);
+      await session.ready;
+    } else {
+      const expectAudio = wantAudio && (mediaSessions.length > 0 || needsLiveAudio);
+      if (wantAudio && !expectAudio) warnings.push('Animasi tidak memutar audio; hasil hanya berisi video.');
+      session = options.encoder.beginFrames(
+        { ...encoderConfig, audio: expectAudio ? 'deferred' : null },
+        onEncoderProgress,
+        signal,
       );
-    }
-    if (wantAudio && format !== 'mp3' && !audio)
-      warnings.push('Animasi tidak memutar audio; hasil hanya berisi video.');
-    checkAborted();
+      await session.ready;
+      // Record live audio while frames render, so both take about the animation's duration in total.
+      const audioPromise = expectAudio ? buildAudio() : Promise.resolve(null);
+      audioPromise.catch(() => undefined);
 
-    const session = options.encoder.beginFrames(
-      { format, width, height, fps, mp4VideoCodec: options.mp4VideoCodec, audio, durationSeconds },
-      (stage, fraction) => options.onProgress(stage, fraction),
-      signal,
-    );
-    await session.ready;
-
-    if (format !== 'mp3') {
       const total = Math.max(1, Math.round(durationSeconds * fps));
       const renderFrame = await openRenderFrame(bundle, width, height);
       frames.push(renderFrame);
-      options.onProgress('rendering', 0, `0/${total}`);
+      const parallelNote = needsLiveAudio ? ' · audio direkam paralel' : '';
+      options.onProgress('rendering', 0, `0/${total}${parallelNote}`);
       await renderFrame.render(
-        { durationSeconds, fps, width, height, autoStart: options.autoStart },
+        { durationSeconds, fps, width, height, autoStart: options.autoStart, cropToStage: options.cropToStage },
         async (bitmap, index) => {
           checkAborted();
           await session.addFrame(bitmap, index);
-          options.onProgress('rendering', (index + 1) / total, `${index + 1}/${total}`);
+          options.onProgress('rendering', (index + 1) / total, `${index + 1}/${total}${parallelNote}`);
         },
       );
       renderFrame.destroy();
+
+      if (expectAudio) {
+        if (needsLiveAudio) options.onProgress('recording-audio', null, 'menunggu rekaman audio selesai');
+        const audio = await audioPromise;
+        checkAborted();
+        if (!audio) warnings.push('Audio tidak dapat direkam; hasil berisi trek audio hening.');
+        session.setAudio(audio);
+      }
     }
     checkAborted();
     const result = await session.finish();

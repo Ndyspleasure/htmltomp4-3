@@ -170,6 +170,10 @@ const choice =
     </fieldset>
 
     <div class="flex flex-col gap-2 sm:col-span-2">
+      <label class="flex items-center gap-2 text-sm" data-el="crop-field">
+        <input type="checkbox" name="cropToStage" checked={DEFAULT_SETTINGS.cropToStage} />
+        Hanya area animasi (potong latar halaman &amp; tombol pemutar di luar panggung)
+      </label>
       <label class="flex items-center gap-2 text-sm">
         <input type="checkbox" name="autoStart" checked={DEFAULT_SETTINGS.autoStart} />
         Klik otomatis tombol “Putar/Play” di awal (bila animasi menunggu klik)

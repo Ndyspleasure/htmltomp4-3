@@ -58,6 +58,7 @@ export const DEFAULT_SETTINGS = {
   method: 'direct',
   autoDuration: true,
   autoStart: true,
+  cropToStage: true,
   outputFormat: 'mp4',
   resolutionId: '1280x720',
   frameRate: 30,

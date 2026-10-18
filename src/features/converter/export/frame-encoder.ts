@@ -28,7 +28,11 @@ export interface FrameEncodeConfig {
   height: number;
   fps: number;
   mp4VideoCodec: Mp4VideoCodec;
-  audio: MixedAudio | null;
+  /**
+   * Pre-mixed audio, 'deferred' when the audio track will be supplied later via setAudio() (it is still
+   * being recorded while frames render), or null for no audio track.
+   */
+  audio: MixedAudio | 'deferred' | null;
   durationSeconds: number;
 }
 
@@ -46,7 +50,8 @@ export class FrameEncoder {
     private readonly audioCodec: 'aac' | 'mp3' | 'opus' | null,
     private readonly limitedCompatibility: boolean,
     private readonly notes: string[],
-    private readonly peak: number,
+    private peak: number,
+    private audioSource: InstanceType<Mediabunny['AudioSampleSource']> | null,
   ) {}
 
   static async create(config: FrameEncodeConfig): Promise<FrameEncoder> {
@@ -112,15 +117,43 @@ export class FrameEncoder {
         quality: new mb.Quality({ bitrate, bitrateMode: 'constant' }),
       });
       output.addAudioTrack(audioSource);
-      peak = peakOf(config.audio.channels);
+      if (config.audio !== 'deferred') peak = peakOf(config.audio.channels);
     }
 
     await output.start();
-    if (audioSource && config.audio) {
+    if (audioSource && config.audio && config.audio !== 'deferred') {
       await writeAudio(mb, audioSource, config.audio);
       audioSource.close();
+      audioSource = null;
     }
-    return new FrameEncoder(mb, config, output, videoSource, videoCodec, audioCodec, limitedCompatibility, notes, peak);
+    return new FrameEncoder(
+      mb,
+      config,
+      output,
+      videoSource,
+      videoCodec,
+      audioCodec,
+      limitedCompatibility,
+      notes,
+      peak,
+      audioSource,
+    );
+  }
+
+  /** Supplies the deferred audio track. null writes silence so the declared track is never empty. */
+  async setAudio(audio: MixedAudio | null): Promise<void> {
+    const source = this.audioSource;
+    if (!source) return;
+    this.audioSource = null;
+    const track =
+      audio ??
+      ({
+        sampleRate: 48_000,
+        channels: [0, 1].map(() => new Float32Array(Math.max(1, Math.round(this.config.durationSeconds * 48_000)))),
+      } satisfies MixedAudio);
+    this.peak = peakOf(track.channels);
+    await writeAudio(this.mb, source, track);
+    source.close();
   }
 
   async addFrame(bitmap: ImageBitmap, index: number): Promise<void> {
@@ -141,6 +174,7 @@ export class FrameEncoder {
   }
 
   async finish(onValidating: () => void): Promise<ConvertResult> {
+    if (this.audioSource) await this.setAudio(null);
     this.videoSource?.close();
     await this.output.finalize();
     const buffer = (this.output.target as InstanceType<Mediabunny['BufferTarget']>).buffer;

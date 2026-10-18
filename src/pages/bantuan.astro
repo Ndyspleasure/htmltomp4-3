@@ -107,7 +107,8 @@ import { formatBytes } from '../features/converter/format';
       <li>
         Konversi langsung memotret DOM per frame; efek seperti <code>backdrop-filter</code>, iframe di dalam animasi,
         atau gambar/font lintas origin tanpa CORS bisa tampil berbeda. Suara sintetis (<code>speechSynthesis</code>)
-        tidak dapat direkam browser.
+        tidak dapat direkam browser; untuk voice-over gunakan file audio (mis. <code>&lt;audio src="vo.mp3"&gt;</code>)
+        di dalam ZIP.
       </li>
       <li>
         Audio harus berbunyi saat direkam. Jika animasi memerlukan klik untuk memulai audio, klik di dalam preview

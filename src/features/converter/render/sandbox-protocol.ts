@@ -50,7 +50,16 @@ export type AppToSandbox =
       collectAudio: boolean;
       autoStart: boolean;
     }
-  | { type: 'h2m:render'; durationSeconds: number; fps: number; width: number; height: number; autoStart: boolean }
+  | {
+      type: 'h2m:render';
+      durationSeconds: number;
+      fps: number;
+      width: number;
+      height: number;
+      autoStart: boolean;
+      /** Capture only the detected stage element (e.g. a 9:16 frame) instead of the whole page. */
+      cropToStage: boolean;
+    }
   | { type: 'h2m:record-audio'; durationSeconds: number; autoStart: boolean }
   | { type: 'h2m:render-ack'; index: number }
   | { type: 'h2m:render-cancel' };

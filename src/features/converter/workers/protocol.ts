@@ -1,6 +1,6 @@
 import type { ConverterErrorCode } from '../errors';
 import type { ConvertRequest, ConvertResult, EncodeStage, EncoderSupport } from '../export/convert-media';
-import type { FrameEncodeConfig } from '../export/frame-encoder';
+import type { FrameEncodeConfig, MixedAudio } from '../export/frame-encoder';
 import type { ZipReadResult } from '../import/read-zip';
 
 export type EncoderRequest =
@@ -8,6 +8,7 @@ export type EncoderRequest =
   | { type: 'convert'; id: number; request: ConvertRequest }
   | { type: 'frames-begin'; id: number; config: FrameEncodeConfig }
   | { type: 'frames-add'; id: number; index: number; bitmap: ImageBitmap }
+  | { type: 'frames-audio'; id: number; audio: MixedAudio | null }
   | { type: 'frames-end'; id: number }
   | { type: 'cancel'; id: number };
 
