@@ -1,6 +1,8 @@
 # Arsitektur Proyek HTML to MP4 / MP3 Converter
 
-> Dokumen rancangan teknis awal. Nama produk, identitas visual, dan domain belum ditetapkan. Dokumen ini menjadi acuan implementasi untuk developer.
+> Dokumen rancangan teknis. Nama produk, identitas visual, dan domain belum ditetapkan. Dokumen ini menjadi acuan implementasi untuk developer.
+>
+> **Status implementasi (v0.1.0):** Fase 1–5 MVP sudah diimplementasikan. Keputusan yang menyimpang dari rancangan awal dicatat di §16 (ADR) dan ditandai di bagian terkait.
 
 ## 1. Ringkasan proyek
 
@@ -28,12 +30,13 @@ Karena itu, fitur ini harus dijelaskan sebagai **preview → rekam tab/jendela d
 | Bahasa | TypeScript | Memeriksa kontrak antar-modul dan mengurangi error saat pengembangan. |
 | Styling | Tailwind CSS | UI responsif dan konsisten. |
 | UI interaktif | Astro components + client-side TypeScript | Bagian converter di-hydrate di sisi klien; tidak perlu menjadikan semua halaman aplikasi dinamis. |
-| Import ZIP | JSZip atau library setara | Membaca `index.html`, aset, dan direktori dari ZIP di browser. Evaluasi ukuran bundle dan keamanan sebelum menetapkan dependency. |
+| Import ZIP | **fflate** (MIT) | Membaca ZIP di Web Worker. Dipilih karena kecil dan mengalokasikan buffer dari ukuran yang dideklarasikan (lihat §5.1). |
 | Perekaman | `navigator.mediaDevices.getDisplayMedia()` + `MediaRecorder` | Meminta pengguna memilih tab/jendela/layar yang berisi preview dan merekam stream. |
-| Ekspor MP4/MP3 | Adapter encoder dengan `ffmpeg.wasm` sebagai jalur kompatibilitas awal | Jalankan encoding di Worker. Pastikan build FFmpeg yang dipilih benar-benar memiliki encoder yang dibutuhkan; jangan menganggap semua build mendukung codec yang sama. |
-| Alternatif encoding | WebCodecs + library muxing seperti Mediabunny | Dapat menjadi jalur lebih efisien bila encoder/codec tersedia di browser. Wajib ada capability detection dan fallback. |
-| Penyimpanan sementara | IndexedDB / object URL di perangkat | Menyimpan berkas sementara untuk preview lintas tab jika diperlukan. Bersihkan setelah sesi selesai. |
-| Deployment | Vercel Static Deployment | Hosting halaman dan aset statis; tidak membutuhkan API Functions untuk proses konversi MVP. |
+| Ekspor MP4/MP3 | **Mediabunny** (MPL-2.0) + WebCodecs, dengan `@mediabunny/aac-encoder` dan `@mediabunny/mp3-encoder` (WASM) | Dijalankan di Web Worker. `ffmpeg.wasm` **tidak** dipakai — lihat ADR-001 di §16. |
+| Fallback codec | VP9/AV1 di dalam MP4, atau WebM | Ditawarkan secara eksplisit (berlabel “kompatibilitas terbatas”) bila encoder H.264 tidak tersedia. Remux tanpa transcode bila MediaRecorder sudah menghasilkan H.264. |
+| Penyimpanan sementara | Memori tab + object URL | IndexedDB tidak diperlukan: jendela preview menerima bundle lewat `postMessage`. Semua resource dilepas saat selesai/gagal/batal/reset. |
+| Deployment | Vercel Static Deployment | Hosting halaman dan aset statis; tidak membutuhkan API Functions. Header keamanan di `vercel.json`. |
+| Testing | Vitest + happy-dom, Playwright (Chromium) | Unit test modul murni; E2E terhadap build produksi yang disajikan dengan header `vercel.json`. |
 
 Versi dependency harus dikunci di lockfile dan diperbarui lewat pengujian. Jangan mengandalkan URL CDN pihak ketiga untuk file inti WebAssembly tanpa strategi versi, integrity, dan fallback yang jelas.
 
@@ -102,6 +105,8 @@ Batas tersebut adalah guardrail produk awal, bukan batas browser universal. Uji 
 - Beri label bahwa resource eksternal mungkin memerlukan internet dan dapat gagal karena CORS, CSP, autentikasi, atau batasan browser.
 - Jangan membuka HTML mentah pengguna pada origin utama aplikasi.
 
+**Implementasi (lihat ADR-002):** iframe memuat `/sandbox.html` dengan `sandbox="allow-scripts"` dan `allow="autoplay"` (origin opaque). Aplikasi mengirim *bundle* lewat `postMessage`: setiap file proyek menjadi aset, referensi di CSS (`url()`, `@import`) dan import modul JS (via `es-module-lexer`) diganti token. HTML **hanya di-parse di dalam sandbox** oleh loader (`src/sandbox/loader.ts`), yang membuat `blob:` URL di origin opaque-nya sendiri, memasang shim untuk `fetch`/XHR/`src`/`Audio`, lalu menulis dokumen dengan `document.write`. Konten pengguna tidak bisa membaca DOM, storage, maupun cookie aplikasi (diuji E2E).
+
 **Catatan kompatibilitas:** sandbox yang ketat bisa memengaruhi JavaScript module, `fetch`, service worker, penyimpanan, dan resource lintas origin. Jangan mengklaim semua proyek HTML dapat berjalan identik dengan browser aslinya. Bila dukungan bagi HTML arbitrer yang kompleks menjadi persyaratan utama, pertimbangkan renderer terpisah pada origin khusus atau layanan browser terisolasi sebagai fase lanjutan.
 
 ### 5.3 Perekaman tab/jendela
@@ -115,6 +120,8 @@ Batas tersebut adalah guardrail produk awal, bukan batas browser universal. Uji 
 - Tangani `stop`, `error`, pengguna menghentikan sharing dari browser, izin ditolak, tab ditutup, serta capture tanpa track.
 - Hentikan semua `MediaStreamTrack` setelah sesi perekaman berakhir.
 
+**Implementasi:** dua mode — (1) *Tab ini*: `preferCurrentTab` + Region Capture (`CropTarget`/`cropTo`) sehingga hanya area preview yang direkam (Chromium); (2) *Jendela preview terpisah*: route `/preview` dibuka sebagai pop-up berukuran resolusi target, converter tab dikecualikan dari picker (`selfBrowserSurface: 'exclude'`), dan `CropTarget` dikirim dari jendela preview untuk memotong letterbox. Capture Handle dipakai untuk mendeteksi tab yang salah: handle yang *berbeda* ditolak, handle yang tidak tersedia hanya menjadi peringatan (lihat ADR-004).
+
 ### 5.4 Ekspor MP4
 
 Urutan strategi:
@@ -124,6 +131,8 @@ Urutan strategi:
 3. Jika memakai WebCodecs, periksa dukungan codec melalui API; tambahkan muxer karena WebCodecs tidak dengan sendirinya menulis file MP4.
 4. Periksa tipe MIME dan hasil file setelah ekspor. Ekstensi `.mp4` tidak boleh dipasang pada data WebM yang belum dikonversi.
 5. Jika jalur konversi MP4 tidak tersedia di perangkat, jelaskan kendala dan tawarkan WebM sebagai opsi alternatif (jika produk mengizinkan), alih-alih menghasilkan file palsu.
+
+**Implementasi:** MP4 selalu dibuat ulang lewat Mediabunny `Conversion` (resize *contain* ke resolusi target, FPS target, bitrate = lebar × tinggi × FPS × 0,1 bpp dalam batas 1–16 Mbps, keyframe tiap 2 detik). Urutan codec video: H.264 → VP9 → AV1; selain H.264 diberi label “kompatibilitas terbatas”. Audio AAC memakai encoder bawaan browser atau WASM. Jika tidak ada encoder video tetapi rekaman sudah H.264, file di-remux tanpa ubah resolusi. Hasil dibaca ulang (signature + parse container/track/codec/durasi) sebelum tombol unduh muncul.
 
 Codec MP4 yang diprioritaskan untuk kompatibilitas umum adalah H.264 untuk video dan AAC untuk audio, tetapi dukungan aktual bergantung pada browser dan build encoder. Encoder harus melakukan capability check serta melaporkan error secara eksplisit.
 
@@ -136,6 +145,8 @@ Codec MP4 yang diprioritaskan untuk kompatibilitas umum adalah H.264 untuk video
 - Pastikan build encoder yang digunakan mendukung MP3, atau sediakan encoder MP3 khusus yang sudah diuji.
 - Jika audio tidak terdengar saat preview, periksa apakah halaman memerlukan klik pengguna untuk memulai audio, sesuai aturan autoplay browser.
 
+**Implementasi:** mode MP3 hanya merekam track audio (MediaRecorder audio-only), lalu meng-encode MP3 CBR 192 kbps dengan `@mediabunny/mp3-encoder` (LAME, WASM, di-load hanya saat dibutuhkan). Puncak amplitudo diukur selama encoding; audio yang hening diberi peringatan, bukan diam-diam dianggap berhasil.
+
 ### 5.6 Worker dan encoder
 
 - Encoding dijalankan di Web Worker melalui wrapper terisolasi; jangan menjalankan loop encoding berat di main thread.
@@ -147,59 +158,34 @@ Codec MP4 yang diprioritaskan untuk kompatibilitas umum adalah H.264 untuk video
 
 ## 6. Arsitektur route dan struktur folder
 
-Contoh struktur implementasi:
+Struktur yang diimplementasikan:
 
 ```text
 src/
-├── components/
-│   ├── AppHeader.astro
-│   ├── UploadDropzone.astro
-│   ├── PreviewPanel.astro
-│   ├── RecordingControls.astro
-│   ├── ExportSettings.astro
-│   ├── ConversionProgress.astro
-│   └── ResultPanel.astro
-├── layouts/
-│   └── BaseLayout.astro
-├── pages/
-│   ├── index.astro
-│   ├── privacy.astro
-│   └── preview.astro
-├── features/
-│   └── converter/
-│       ├── types.ts
-│       ├── constants.ts
-│       ├── validation/
-│       │   ├── validate-file.ts
-│       │   └── validate-archive.ts
-│       ├── import/
-│       │   ├── read-html.ts
-│       │   └── read-zip.ts
-│       ├── preview/
-│       │   ├── preview-session.ts
-│       │   └── sandbox-policy.ts
-│       ├── capture/
-│       │   ├── capability-check.ts
-│       │   ├── display-capture.ts
-│       │   └── media-recorder.ts
-│       ├── export/
-│       │   ├── export-mp4.ts
-│       │   ├── export-mp3.ts
-│       │   ├── output-validation.ts
-│       │   └── encoder-adapter.ts
-│       ├── workers/
-│       │   └── encoder.worker.ts
-│       └── cleanup/
-│           └── release-resources.ts
-├── styles/
-│   └── global.css
-└── env.d.ts
-public/
-└── media-engine/
-    └── (aset core WASM yang dipilih dan diuji)
+├── config/converter-config.ts        # satu-satunya sumber batas, preset, codec, bitrate
+├── components/                        # UploadDropzone, PreviewPanel, ExportSettings, RecordingControls,
+│                                      # ConversionProgress, ResultPanel (.astro)
+├── layouts/BaseLayout.astro
+├── pages/                             # index, preview (jendela rekam), bantuan, privasi, lisensi, 404
+├── sandbox/loader.ts                  # loader sandbox → public/generated/sandbox-loader.js (build:sandbox)
+├── features/converter/
+│   ├── types.ts, errors.ts, format.ts
+│   ├── validation/                    # validate-file.ts, archive-path.ts
+│   ├── import/                        # import-source.ts, read-zip.ts, zip-client.ts
+│   ├── preview/                       # build-bundle, rewrite-{html,css,js}, reference-resolver, mount-preview, mime
+│   ├── capture/                       # capability-check, display-capture, media-recorder
+│   ├── export/                        # convert-media, encoder-client, export-options, output-validation
+│   ├── workers/                       # encoder.worker.ts, zip.worker.ts, protocol.ts
+│   ├── state/state-machine.ts
+│   ├── cleanup/resource-tracker.ts
+│   └── ui/                            # converter-app.ts, preview-window.ts, window-protocol.ts
+└── styles/global.css
+public/sandbox.html                    # host halaman sandbox (tanpa CSP aplikasi, frame-ancestors 'self')
+scripts/serve-dist.mjs                 # server statis + header vercel.json untuk E2E/preview lokal
+tests/unit, tests/e2e                  # Vitest & Playwright
 ```
 
-Struktur ini merupakan usulan, bukan kewajiban untuk membuat setiap file pada hari pertama. Pertahankan pemisahan modul berdasarkan tanggung jawab.
+Pertahankan pemisahan modul berdasarkan tanggung jawab.
 
 ## 7. Kontrak data inti
 
@@ -303,14 +289,16 @@ MVP tidak membutuhkan server untuk proses tersebut. Selain menambah biaya dan ko
 
 ### Checklist deployment
 
-- [ ] `npm run build` berjalan tanpa error.
-- [ ] Route utama dan route preview dapat diakses di deployment preview.
-- [ ] File worker dan WASM dapat dimuat tanpa 404 atau error MIME.
-- [ ] CORS/CSP/CORP/COOP/COEP sesuai kebutuhan implementasi dan telah diuji.
+Status per v0.1.0 (✓ = diverifikasi otomatis di CI/E2E lokal; ☐ = harus dicek pada deployment Vercel sungguhan):
+
+- [x] `npm run build` berjalan tanpa error.
+- [x] Route utama, `/preview`, `/sandbox.html`, `/bantuan`, `/privasi`, `/lisensi`, dan 404 dapat diakses (E2E terhadap build produksi).
+- [x] Worker dan encoder WASM (blob worker) dapat dimuat di bawah CSP produksi (E2E dengan header `vercel.json`).
+- [x] CSP/COOP/Permissions-Policy diuji; COEP tidak diperlukan karena encoder single-thread.
 - [ ] Encoding diuji di URL HTTPS hasil deploy, bukan hanya localhost.
-- [ ] Uji ukuran aset statis terhadap batas Vercel saat ini.
-- [ ] Coba tab capture di browser target pada deployment production.
-- [ ] Pastikan tidak ada file pengguna yang dikirim ke API/analytics tanpa persetujuan.
+- [x] Ukuran aset statis: aset terbesar ±1 MB (encoder AAC WASM, lazy-loaded); total `dist` ±4 MB.
+- [ ] Coba tab capture di Chrome/Edge/Firefox/Safari pada deployment production.
+- [x] Tidak ada API route, analytics, atau upload; `connect-src 'self' blob: data:` mencegah pengiriman data dari halaman aplikasi.
 
 ## 12. Batasan MVP yang harus disampaikan secara terbuka
 
@@ -385,6 +373,33 @@ Referensi resmi untuk implementasi dan validasi kompatibilitas:
 - MDN — iframe sandbox: https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe
 - FFmpeg.wasm — Overview: https://ffmpegwasm.netlify.app/docs/overview/
 - Mediabunny — Supported formats and codecs: https://mediabunny.dev/guide/supported-formats-and-codecs
+
+## 16. Catatan keputusan arsitektur (ADR)
+
+### ADR-001 — Mediabunny + WebCodecs, bukan ffmpeg.wasm
+
+- **Masalah:** rancangan awal memakai `ffmpeg.wasm` sebagai jalur kompatibilitas.
+- **Temuan:** `@ffmpeg/core` berlisensi GPL-2.0-or-later (karena x264), berukuran ±31 MB WASM, dan transcode software di WASM lambat. Mediabunny (MPL-2.0) memakai encoder WebCodecs (hardware bila ada) dan menyediakan encoder AAC/MP3 berbasis WASM yang kecil (±1 MB / ±0,3 MB) dan di-load hanya saat dibutuhkan.
+- **Keputusan:** Mediabunny untuk demux/transcode/mux; AAC/MP3 lewat ekstensi WASM bila browser tidak punya encoder bawaan.
+- **Dampak:** H.264 membutuhkan encoder WebCodecs (Chrome/Edge/Safari; Firefox bergantung platform). Bila tidak ada, aplikasi menawarkan VP9/AV1 di dalam MP4 (berlabel kompatibilitas terbatas), remux H.264 dari MediaRecorder, atau WebM — tidak pernah file palsu.
+- **Migrasi bila diperlukan:** encoder video WASM dapat didaftarkan lewat `registerEncoder` Mediabunny tanpa mengubah alur UI.
+
+### ADR-002 — HTML pengguna hanya di-parse di dalam sandbox
+
+- **Masalah:** mem-parse HTML pengguna dengan `DOMParser` di origin aplikasi memicu pelanggaran CSP (`style-src`) dan memperluas permukaan serangan; `srcdoc` mewarisi CSP aplikasi sehingga script pengguna terblokir.
+- **Keputusan:** iframe memuat `/sandbox.html` (tanpa CSP aplikasi, `frame-ancestors 'self'`) dengan `sandbox="allow-scripts"`. Aplikasi hanya menulis ulang CSS/JS (teks, tanpa DOM); loader di sandbox menulis ulang HTML dan membuat `blob:` URL di origin opaque.
+- **Dampak:** CSP aplikasi tetap ketat (`script-src 'self' 'wasm-unsafe-eval'`, tanpa `unsafe-inline`). Path dinamis yang tidak lewat API yang di-shim (mis. `new URL(..., import.meta.url)`, Worker dari file proyek) bisa gagal; didokumentasikan di halaman Bantuan.
+
+### ADR-003 — Header keamanan di `vercel.json`
+
+- CSP aplikasi: `default-src 'self'`, `worker-src 'self' blob:` (encoder WASM berjalan di blob worker), `media-src 'self' blob:`, `frame-ancestors 'self'`, `object-src 'none'`, `form-action 'none'`.
+- `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` (`display-capture=(self)`, fitur sensitif lain dimatikan), `Cross-Origin-Opener-Policy: same-origin` (jendela preview tetap same-origin).
+- Kamera/mikrofon tidak dimatikan lewat header karena Chromium melaporkan pelanggaran saat capture audio tab; aplikasi tidak pernah memanggil `getUserMedia`.
+- `scripts/serve-dist.mjs` menerapkan header yang sama untuk E2E agar perilaku CSP teruji sebelum deploy.
+
+### ADR-004 — Verifikasi tab yang direkam
+
+- Capture Handle hanya tersedia di Chromium dan tidak selalu terekspos (mis. di headless). Handle yang **berbeda** dari yang diharapkan (contoh: tab converter dipilih alih-alih jendela preview) menyebabkan perekaman ditolak; handle yang **tidak ada** hanya menghasilkan peringatan agar pengguna sah tidak terblokir.
 
 ---
 

@@ -1,0 +1,51 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import UploadDropzone from '../components/UploadDropzone.astro';
+import PreviewPanel from '../components/PreviewPanel.astro';
+import ExportSettings from '../components/ExportSettings.astro';
+import RecordingControls from '../components/RecordingControls.astro';
+import ConversionProgress from '../components/ConversionProgress.astro';
+import ResultPanel from '../components/ResultPanel.astro';
+---
+
+<BaseLayout title="HTML ke MP4/MP3">
+  <div class="mb-8 max-w-3xl">
+    <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">Rekam animasi HTML menjadi MP4 atau MP3</h1>
+    <p class="mt-3 text-slate-600 dark:text-slate-400">
+      Impor file <code>.html</code> atau proyek <code>.zip</code>, periksa preview, lalu rekam tab/jendela preview
+      dengan izin Anda. Hasilnya dikonversi dan divalidasi di browser sebelum bisa diunduh — tidak ada file yang
+      diunggah ke server.
+    </p>
+    <p class="hint mt-2">Konversi hanya konten yang Anda miliki atau berhak gunakan.</p>
+  </div>
+
+  <div
+    data-el="global-error"
+    role="alert"
+    class="mb-6 hidden rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200"
+  ></div>
+  <div
+    data-el="compat-banner"
+    class="mb-6 hidden rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+    role="status"
+  ></div>
+  <p data-el="status-text" class="sr-only" aria-live="polite"></p>
+
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+    <div class="flex flex-col gap-6">
+      <UploadDropzone />
+      <ExportSettings />
+    </div>
+    <div class="flex flex-col gap-6">
+      <PreviewPanel />
+      <RecordingControls />
+      <ConversionProgress />
+      <ResultPanel />
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  import { initConverterApp } from '../features/converter/ui/converter-app';
+  initConverterApp(document);
+</script>

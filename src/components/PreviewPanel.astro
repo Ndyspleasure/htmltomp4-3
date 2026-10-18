@@ -1,0 +1,35 @@
+<section class="card" aria-labelledby="step-preview">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h2 id="step-preview" class="step-title">
+      <span class="step-badge" aria-hidden="true">
+        2
+      </span>{' '}
+      Preview
+    </h2>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" data-el="restart-preview" class="btn-secondary" disabled>
+        Mulai ulang animasi
+      </button>
+      <button type="button" data-el="open-window" class="btn-secondary" disabled>
+        Buka jendela preview
+      </button>
+    </div>
+  </div>
+  <p class="hint mt-2">
+    Preview berjalan di iframe terisolasi (sandbox tanpa akses ke halaman ini). Resource eksternal (CDN, font, API)
+    butuh internet dan bisa gagal karena CORS/CSP atau batasan browser.
+  </p>
+  <div
+    data-el="preview-host"
+    class="relative mt-4 flex h-[min(70vh,640px)] min-h-48 items-center justify-center overflow-hidden rounded-xl bg-[repeating-conic-gradient(#e2e8f0_0_25%,#f8fafc_0_50%)] bg-[length:20px_20px] p-2 dark:bg-[repeating-conic-gradient(#1e293b_0_25%,#0f172a_0_50%)]"
+  >
+    <p data-el="preview-empty" class="hint">
+      Belum ada file. Preview akan tampil di sini.
+    </p>
+  </div>
+  <p data-el="preview-meta" class="hint mt-2" aria-live="polite"></p>
+  <ul
+    data-el="preview-errors"
+    class="mt-2 hidden list-disc space-y-1 pl-6 text-sm text-amber-700 dark:text-amber-400"
+  ></ul>
+</section>

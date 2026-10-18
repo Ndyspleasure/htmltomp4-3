@@ -1,0 +1,105 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { IMPORT_LIMITS, RECORDING_LIMITS } from '../config/converter-config';
+import { formatBytes } from '../features/converter/format';
+---
+
+<BaseLayout
+  title="Bantuan & kompatibilitas"
+  description="Cara memakai converter HTML ke MP4/MP3, batasan, dan dukungan browser."
+>
+  <article class="prose-page max-w-3xl">
+    <h1 class="text-3xl font-bold">Bantuan &amp; kompatibilitas</h1>
+
+    <h2>Cara kerja</h2>
+    <p>
+      HTML adalah dokumen yang dirender browser, bukan file video. Karena itu converter ini bekerja dengan alur
+      <strong>preview → rekam tab/jendela dengan izin Anda → konversi → validasi → unduh</strong>. Tidak ada janji bahwa
+      setiap HTML dapat dikonversi secara otomatis.
+    </p>
+
+    <h2>Langkah</h2>
+    <ul>
+      <li>
+        Pilih file <code>.html</code> atau <code>.zip</code> (ZIP harus berisi <code>index.html</code> atau pilih entry
+        point).
+      </li>
+      <li>Periksa preview, pilih format (MP4, MP3, atau WebM), resolusi, FPS, dan durasi.</li>
+      <li>
+        <strong>Tab ini:</strong> klik “Mulai Rekam” lalu pilih “Tab ini”; hanya area preview yang direkam (Chrome/Edge
+        desktop).
+      </li>
+      <li>
+        <strong>Jendela preview:</strong> klik “Buka jendela preview”, kembali ke tab converter, klik “Mulai Rekam”,
+        lalu pilih tab “Preview Rekaman”.
+      </li>
+      <li>Untuk audio/MP3 aktifkan “Bagikan audio tab” di dialog izin.</li>
+      <li>Rekaman berhenti otomatis setelah durasi yang Anda pilih atau saat Anda menekan “Berhenti”.</li>
+    </ul>
+
+    <h2>Batas</h2>
+    <ul>
+      <li>
+        HTML maksimum {formatBytes(IMPORT_LIMITS.maxHtmlBytes)}; ZIP maksimum {formatBytes(IMPORT_LIMITS.maxZipBytes)}.
+      </li>
+      <li>
+        Isi ZIP maksimum {IMPORT_LIMITS.maxArchiveEntries} file dan {formatBytes(IMPORT_LIMITS.maxExtractedBytes)}{' '}
+        setelah diekstrak. Arsip dengan path tidak aman (<code>../</code>, path absolut) atau rasio kompresi
+        mencurigakan ditolak.
+      </li>
+      <li>Durasi rekaman maksimum {RECORDING_LIMITS.maxDurationSeconds} detik.</li>
+    </ul>
+
+    <h2>Dukungan browser</h2>
+    <ul>
+      <li>
+        <strong>Chrome / Edge desktop (disarankan):</strong> rekam tab + audio tab, rekam area preview di tab ini, MP4
+        H.264 + AAC, MP3.
+      </li>
+      <li>
+        <strong>Firefox desktop:</strong> rekam jendela/tab tanpa audio tab. MP4 bergantung pada encoder WebCodecs yang
+        tersedia; MP3 tidak tersedia karena audio tab tidak didukung.
+      </li>
+      <li>
+        <strong>Safari macOS:</strong> rekam jendela/layar (tanpa pilihan tab dan tanpa audio tab).
+      </li>
+      <li>
+        <strong>Mobile:</strong> perekaman tab umumnya tidak didukung.
+      </li>
+    </ul>
+    <p>
+      Panel “Kemampuan browser ini” di halaman converter menampilkan hasil deteksi nyata untuk browser Anda. Jika H.264
+      tidak tersedia, Anda dapat memilih VP9/AV1 di dalam MP4 (file MP4 valid, tetapi tidak semua pemutar mendukungnya)
+      atau WebM.
+    </p>
+
+    <h2>Keterbatasan yang perlu diketahui</h2>
+    <ul>
+      <li>Tidak semua animasi tampil identik di semua browser.</li>
+      <li>
+        Video eksternal, WebGL, font eksternal, CORS, iframe lintas origin, konten DRM, dan resource yang butuh login
+        dapat gagal atau tampil berbeda. Preview berjalan di sandbox tanpa <code>localStorage</code>/cookie.
+      </li>
+      <li>
+        Aset lokal di ZIP dimuat lewat penulisan ulang referensi (HTML, CSS, import modul, <code>fetch</code>, XHR,
+        <code>src</code>). Path yang dibentuk secara dinamis yang tidak lewat API tersebut (mis.{' '}
+        <code>new URL(..., import.meta.url)</code>, Worker) bisa gagal.
+      </li>
+      <li>Kualitas mengikuti resolusi tangkapan. Untuk resolusi penuh gunakan jendela preview terpisah.</li>
+      <li>
+        Audio harus berbunyi saat direkam. Jika animasi memerlukan klik untuk memulai audio, klik di dalam preview
+        setelah perekaman dimulai.
+      </li>
+      <li>
+        Encoding memakai memori perangkat; durasi panjang dan resolusi tinggi bisa lambat atau gagal di perangkat lemah.
+      </li>
+    </ul>
+
+    <h2>Validasi hasil</h2>
+    <p>
+      Setiap hasil dibaca ulang untuk memeriksa container, codec, track, dan durasi sebelum tombol unduh muncul.
+      Ekstensi
+      <code>.mp4</code>/<code>.mp3</code> hanya diberikan jika file benar-benar berformat tersebut.
+    </p>
+  </article>
+</BaseLayout>

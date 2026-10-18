@@ -1,0 +1,53 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Privasi" description="Bagaimana converter HTML ke MP4/MP3 menangani file dan rekaman Anda.">
+  <article class="prose-page max-w-3xl">
+    <h1 class="text-3xl font-bold">Privasi</h1>
+    <p class="mt-4">Ringkasnya: file Anda tidak pernah meninggalkan perangkat Anda.</p>
+
+    <h2>Pemrosesan di perangkat</h2>
+    <ul>
+      <li>
+        File <code>.html</code>/<code>.zip</code>, preview, rekaman, dan hasil konversi diproses sepenuhnya di browser
+        Anda.
+      </li>
+      <li>Tidak ada API upload, database, akun, cookie pelacak, atau analitik di aplikasi ini.</li>
+      <li>Server hanya menyajikan file statis situs (HTML, CSS, JavaScript, encoder WebAssembly).</li>
+    </ul>
+
+    <h2>Perekaman layar dan audio</h2>
+    <ul>
+      <li>Perekaman hanya dimulai setelah Anda menekan “Mulai Rekam” dan menyetujui dialog izin browser.</li>
+      <li>
+        Izin berlaku untuk satu sesi perekaman. Track media dihentikan saat rekaman selesai, gagal, atau dibatalkan.
+      </li>
+      <li>Browser menampilkan indikator selama tab/jendela sedang dibagikan.</li>
+    </ul>
+
+    <h2>Isolasi konten yang diunggah</h2>
+    <ul>
+      <li>
+        HTML yang Anda unggah dianggap tidak tepercaya dan dijalankan di iframe sandbox tanpa akses ke halaman
+        converter, penyimpanan, atau cookie situs ini.
+      </li>
+      <li>
+        Animasi Anda dapat memuat resource eksternal (misalnya CDN atau font) yang ditulis di dalam HTML. Permintaan
+        tersebut dikirim langsung oleh browser Anda ke server pihak ketiga itu.
+      </li>
+    </ul>
+
+    <h2>Data sementara</h2>
+    <ul>
+      <li>Data disimpan di memori tab selama sesi berlangsung, tidak di penyimpanan permanen.</li>
+      <li>
+        Tombol “Hapus &amp; mulai baru”, memilih file baru, atau menutup tab akan melepaskan preview, rekaman, worker,
+        dan URL objek.
+      </li>
+    </ul>
+
+    <h2>Hak atas konten</h2>
+    <p>Hanya rekam dan konversi konten yang Anda miliki atau berhak gunakan.</p>
+  </article>
+</BaseLayout>

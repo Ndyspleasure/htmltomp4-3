@@ -1,0 +1,69 @@
+---
+import { IMPORT_LIMITS } from '../config/converter-config';
+import { formatBytes } from '../features/converter/format';
+---
+
+<section class="card" aria-labelledby="step-upload">
+  <h2 id="step-upload" class="step-title">
+    <span class="step-badge" aria-hidden="true">
+      1
+    </span>{' '}
+    Pilih file animasi
+  </h2>
+  <div
+    data-el="dropzone"
+    class="mt-4 rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center transition data-[drag=true]:border-brand-500 data-[drag=true]:bg-brand-50 dark:border-slate-700 dark:data-[drag=true]:bg-slate-800"
+  >
+    <p class="font-medium">
+      Seret &amp; lepas file <code>.html</code> atau <code>.zip</code> di sini
+    </p>
+    <p class="hint mt-1">atau</p>
+    <label class="btn-primary mt-2 cursor-pointer">
+      <input
+        data-el="file-input"
+        type="file"
+        accept=".html,.htm,.zip,text/html,application/zip"
+        class="sr-only"
+        aria-describedby="upload-limits"
+      />
+      Pilih file
+    </label>
+    <p id="upload-limits" class="hint mt-3">
+      Batas: HTML {formatBytes(IMPORT_LIMITS.maxHtmlBytes)}, ZIP {formatBytes(IMPORT_LIMITS.maxZipBytes)} (maks.
+      {IMPORT_LIMITS.maxArchiveEntries} file, total {formatBytes(IMPORT_LIMITS.maxExtractedBytes)} setelah diekstrak).
+      ZIP harus berisi
+      <code>index.html</code>.
+    </p>
+  </div>
+
+  <div data-el="file-info" class="mt-4 hidden rounded-xl bg-slate-100 p-4 text-sm dark:bg-slate-800">
+    <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+      <dt class="font-medium">File</dt>
+      <dd data-el="file-name" class="break-all"></dd>
+      <dt class="font-medium">Ukuran</dt>
+      <dd data-el="file-size"></dd>
+      <dt class="font-medium">Isi</dt>
+      <dd data-el="file-contents"></dd>
+    </dl>
+    <div data-el="entry-wrapper" class="mt-3 hidden">
+      <label for="entry-select" class="field-label">
+        Entry point (file HTML utama)
+      </label>
+      <select id="entry-select" data-el="entry-select" class="field"></select>
+    </div>
+    <details class="mt-3">
+      <summary class="cursor-pointer font-medium">Daftar file</summary>
+      <ul data-el="file-list" class="mt-2 max-h-48 overflow-auto font-mono text-xs"></ul>
+    </details>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <button type="button" data-el="reset" class="btn-secondary">
+        Hapus &amp; mulai baru
+      </button>
+    </div>
+  </div>
+  <ul
+    data-el="import-warnings"
+    class="mt-3 hidden list-disc space-y-1 pl-6 text-sm text-amber-700 dark:text-amber-400"
+    aria-live="polite"
+  ></ul>
+</section>

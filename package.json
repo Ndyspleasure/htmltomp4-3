@@ -1,0 +1,51 @@
+{
+  "name": "html-to-mp4-mp3-converter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static web app that records HTML animations in the browser and exports validated MP4/MP3/WebM files. Deploys to Vercel.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "build:sandbox": "vite build -c vite.sandbox.config.ts",
+    "predev": "npm run build:sandbox",
+    "dev": "astro dev",
+    "prebuild": "npm run build:sandbox",
+    "build": "astro build",
+    "preview": "node scripts/serve-dist.mjs 4321",
+    "check": "astro check",
+    "typecheck": "astro check && tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e"
+  },
+  "dependencies": {
+    "@mediabunny/aac-encoder": "^1.61.6",
+    "@mediabunny/mp3-encoder": "^1.61.6",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.4.0",
+    "es-module-lexer": "^3.0.4",
+    "fflate": "^0.8.3",
+    "mediabunny": "^1.61.6",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.56.1",
+    "eslint": "^10.13.0",
+    "happy-dom": "^21.0.3",
+    "prettier": "^3.9.10",
+    "prettier-plugin-astro": "^1.1.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vite": "8.3.4",
+    "vitest": "^5.0.5"
+  }
+}

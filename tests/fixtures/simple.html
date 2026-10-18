@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head><style>body{margin:0;background:#123;color:#fff;font:48px sans-serif} .box{width:100px;height:100px;background:tomato;animation:move 2s linear infinite}@keyframes move{to{transform:translateX(600px)}}</style></head>
+<body><h1 id="title">Hello</h1><div class="box"></div>
+<script>
+document.getElementById('title').textContent = 'Script OK';
+let leaked = 'none';
+try { leaked = String(parent.document.title); } catch (e) { leaked = 'blocked'; }
+let storage = 'none';
+try { localStorage.setItem('x','1'); storage = 'available'; } catch (e) { storage = 'blocked'; }
+document.body.dataset.leak = leaked; document.body.dataset.storage = storage;
+</script>
+</body></html>
