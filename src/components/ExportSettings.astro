@@ -6,6 +6,10 @@ import {
   DEFAULT_SETTINGS,
   MP4_VIDEO_CODECS,
 } from '../config/converter-config';
+
+const defaultMethod: string = DEFAULT_SETTINGS.method;
+const choice =
+  'flex cursor-pointer gap-3 rounded-xl border border-slate-300 p-3 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 has-[:disabled]:opacity-50 dark:border-slate-700 dark:has-[:checked]:bg-slate-800';
 ---
 
 <section class="card" aria-labelledby="step-settings">
@@ -16,6 +20,32 @@ import {
     Pengaturan ekspor
   </h2>
   <form data-el="settings" class="mt-4 grid gap-4 sm:grid-cols-2" novalidate>
+    <fieldset class="sm:col-span-2">
+      <legend class="field-label">Metode konversi</legend>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <label class={choice}>
+          <input type="radio" name="method" value="direct" class="mt-1" checked={defaultMethod === 'direct'} />
+          <span>
+            <strong>⚡ Konversi langsung</strong>
+            <br />
+            <span class="hint">
+              Tanpa izin rekam layar. Animasi dirender frame demi frame di latar belakang (disarankan).
+            </span>
+          </span>
+        </label>
+        <label class={choice}>
+          <input type="radio" name="method" value="capture" class="mt-1" checked={defaultMethod === 'capture'} />
+          <span>
+            <strong>🎥 Rekam layar</strong>
+            <br />
+            <span class="hint">
+              Merekam tab/jendela dengan izin. Untuk WebGL berat atau konten yang tidak tampil benar di mode langsung.
+            </span>
+          </span>
+        </label>
+      </div>
+    </fieldset>
+
     <fieldset class="sm:col-span-2">
       <legend class="field-label">Format keluaran</legend>
       <div class="flex flex-wrap gap-2" data-el="format-group">
@@ -65,6 +95,17 @@ import {
       </select>
     </div>
 
+    <div
+      data-el="layout-hint"
+      class="hidden rounded-xl border border-brand-500 bg-brand-50 p-3 text-sm sm:col-span-2 dark:bg-slate-800"
+      role="status"
+    >
+      <span data-el="layout-hint-text"></span>
+      <button type="button" data-el="layout-apply" class="btn-secondary mt-2 px-3 py-1.5">
+        Gunakan ukuran ini
+      </button>
+    </div>
+
     <div data-el="fps-field">
       <label for="fps" class="field-label">
         Frame rate
@@ -80,7 +121,7 @@ import {
 
     <div>
       <label for="duration" class="field-label">
-        Durasi rekaman (detik)
+        Durasi (detik)
       </label>
       <input
         id="duration"
@@ -89,23 +130,25 @@ import {
         class="field"
         min={RECORDING_LIMITS.minDurationSeconds}
         max={RECORDING_LIMITS.maxDurationSeconds}
-        step="1"
+        step="0.1"
         value={DEFAULT_SETTINGS.durationSeconds}
-        aria-describedby="duration-hint"
+        aria-describedby="duration-hint duration-detected"
       />
+      <label class="mt-2 flex items-center gap-2 text-sm">
+        <input type="checkbox" name="autoDuration" checked={DEFAULT_SETTINGS.autoDuration} />
+        Ikuti durasi animasi (otomatis)
+      </label>
+      <p id="duration-detected" data-el="duration-detected" class="hint mt-1" aria-live="polite"></p>
       <p id="duration-hint" class="hint mt-1">
-        Berhenti otomatis setelah durasi ini (maks. {RECORDING_LIMITS.maxDurationSeconds} detik). Bisa dihentikan lebih
-        awal.
+        Maks. {RECORDING_LIMITS.maxDurationSeconds} detik. Bila durasi tidak bisa dideteksi (animasi berulang terus),
+        nilai di atas yang dipakai.
       </p>
     </div>
 
-    <fieldset class="sm:col-span-2">
-      <legend class="field-label">Cara merekam</legend>
+    <fieldset class="sm:col-span-2" data-el="capture-mode-field">
+      <legend class="field-label">Cara merekam (metode rekam layar)</legend>
       <div class="grid gap-2 sm:grid-cols-2">
-        <label
-          data-el="mode-this-tab"
-          class="flex cursor-pointer gap-3 rounded-xl border border-slate-300 p-3 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 has-[:disabled]:opacity-50 dark:border-slate-700 dark:has-[:checked]:bg-slate-800"
-        >
+        <label data-el="mode-this-tab" class={choice}>
           <input type="radio" name="captureMode" value="this-tab" class="mt-1" />
           <span>
             <strong>Tab ini (area preview saja)</strong>
@@ -113,7 +156,7 @@ import {
             <span class="hint">Pilih “Tab ini” di dialog. Hanya area preview yang direkam (Chrome/Edge desktop).</span>
           </span>
         </label>
-        <label class="flex cursor-pointer gap-3 rounded-xl border border-slate-300 p-3 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 dark:border-slate-700 dark:has-[:checked]:bg-slate-800">
+        <label class={choice}>
           <input type="radio" name="captureMode" value="preview-window" class="mt-1" />
           <span>
             <strong>Jendela preview terpisah</strong>
@@ -128,10 +171,14 @@ import {
 
     <div class="flex flex-col gap-2 sm:col-span-2">
       <label class="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="includeAudio" checked={DEFAULT_SETTINGS.includeAudio} />
-        Sertakan audio tab (jika browser mendukung)
+        <input type="checkbox" name="autoStart" checked={DEFAULT_SETTINGS.autoStart} />
+        Klik otomatis tombol “Putar/Play” di awal (bila animasi menunggu klik)
       </label>
       <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="includeAudio" checked={DEFAULT_SETTINGS.includeAudio} />
+        Sertakan audio
+      </label>
+      <label class="flex items-center gap-2 text-sm" data-el="restart-field">
         <input type="checkbox" name="restartOnRecord" checked={DEFAULT_SETTINGS.restartOnRecord} />
         Mulai ulang animasi saat perekaman dimulai
       </label>

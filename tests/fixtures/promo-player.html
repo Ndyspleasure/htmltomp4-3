@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Promo Player</title>
+<style>
+  html,body{margin:0;height:100%;background:#e5e7eb;font-family:sans-serif}
+  body{display:flex;align-items:center;justify-content:center}
+  .stage{position:relative;height:90vh;aspect-ratio:9/16;background:#111;color:#fff;overflow:hidden;border-radius:12px}
+  .title{position:absolute;top:40%;width:100%;text-align:center;font-size:28px;font-weight:800}
+  .play{position:absolute;top:55%;left:50%;transform:translateX(-50%);padding:8px 18px;border-radius:999px;border:0;background:#fde68a;animation:pulse 1s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.6}}
+  .bar{position:absolute;left:0;bottom:0;height:8px;background:#f59e0b;width:0}
+  .ball{position:absolute;top:20%;left:0;width:40px;height:40px;border-radius:50%;background:#38bdf8}
+  .scene2{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:24px}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="title" id="title">VANILLATE SCIENCE</div>
+    <button class="play" id="play">▶ Putar</button>
+    <div class="ball" id="ball"></div>
+    <div class="scene2" id="scene2">Selesai!</div>
+    <div class="bar" id="bar"></div>
+  </div>
+<script>
+  const DURATION = 6000;
+  let start = null;
+  function frame(t) {
+    if (start === null) start = t;
+    const p = Math.min(1, (t - start) / DURATION);
+    document.getElementById('bar').style.width = (p * 100) + '%';
+    document.getElementById('ball').style.transform = 'translateX(' + Math.round(p * 300) + 'px)';
+    if (p > 0.5) { document.getElementById('scene2').style.display = 'flex'; }
+    if (p < 1) requestAnimationFrame(frame);
+  }
+  document.getElementById('play').addEventListener('click', () => {
+    document.getElementById('play').style.display = 'none';
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    gain.gain.value = 0.2; osc.frequency.value = 330;
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); setTimeout(() => osc.stop(), DURATION);
+    requestAnimationFrame(frame);
+  });
+</script>
+</body>
+</html>

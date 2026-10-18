@@ -2,6 +2,7 @@ import { ENCODER_STALL_TIMEOUT_MS } from '../../../config/converter-config';
 import { ConverterError } from '../errors';
 import type { EncoderRequest, EncoderResponse } from '../workers/protocol';
 import type { ConvertRequest, ConvertResult, EncodeStage, EncoderSupport, ProgressCallback } from './convert-media';
+import type { FrameEncodeConfig } from './frame-encoder';
 
 export type { ConvertRequest, ConvertResult, EncodeStage, EncoderSupport };
 
@@ -9,7 +10,19 @@ interface Pending {
   resolve: (value: never) => void;
   reject: (error: unknown) => void;
   onProgress?: ProgressCallback;
+  onReady?: () => void;
+  onAck?: (index: number) => void;
   stallTimer?: number;
+}
+
+/** Streaming encode session for frames rendered in the sandbox. */
+export interface FrameSessionHandle {
+  /** Resolves once the encoder (and any audio track) is set up. */
+  ready: Promise<void>;
+  /** Transfers the bitmap to the worker; resolves when that frame has been encoded. */
+  addFrame(bitmap: ImageBitmap, index: number): Promise<void>;
+  /** Finalizes and validates the file. */
+  finish(): Promise<ConvertResult>;
 }
 
 /**
@@ -27,6 +40,46 @@ export class EncoderClient {
 
   convert(request: ConvertRequest, onProgress: ProgressCallback, signal?: AbortSignal): Promise<ConvertResult> {
     return this.call<ConvertResult>({ type: 'convert', id: 0, request }, onProgress, signal);
+  }
+
+  beginFrames(config: FrameEncodeConfig, onProgress: ProgressCallback, signal?: AbortSignal): FrameSessionHandle {
+    const worker = this.ensureWorker();
+    const id = this.nextId++;
+    let markReady: () => void = () => undefined;
+    const readySignal = new Promise<void>((resolve) => (markReady = resolve));
+    const ackWaiters = new Map<number, () => void>();
+    const result = new Promise<ConvertResult>((resolve, reject) => {
+      this.pending.set(id, {
+        resolve: resolve as (value: never) => void,
+        reject,
+        onProgress,
+        onReady: markReady,
+        onAck: (index) => {
+          ackWaiters.get(index)?.();
+          ackWaiters.delete(index);
+        },
+      });
+    });
+    result.catch(() => undefined); // surfaced through ready/addFrame/finish
+    // Any failure rejects whatever the caller is currently awaiting.
+    const orFail = <T>(promise: Promise<T>) => Promise.race([promise, result.then(() => promise)]);
+    this.armStallTimer(id);
+    signal?.addEventListener('abort', () => worker.postMessage({ type: 'cancel', id } satisfies EncoderRequest), {
+      once: true,
+    });
+    worker.postMessage({ type: 'frames-begin', id, config } satisfies EncoderRequest);
+    return {
+      ready: orFail(readySignal),
+      addFrame: (bitmap, index) => {
+        const acked = new Promise<void>((resolve) => ackWaiters.set(index, resolve));
+        worker.postMessage({ type: 'frames-add', id, index, bitmap } satisfies EncoderRequest, [bitmap]);
+        return orFail(acked);
+      },
+      finish: () => {
+        worker.postMessage({ type: 'frames-end', id } satisfies EncoderRequest);
+        return result;
+      },
+    };
   }
 
   dispose(): void {
@@ -96,6 +149,14 @@ export class EncoderClient {
       case 'progress':
         this.armStallTimer(message.id);
         entry.onProgress?.(message.stage, message.fraction);
+        break;
+      case 'frames-ready':
+        this.armStallTimer(message.id);
+        entry.onReady?.();
+        break;
+      case 'frames-ack':
+        this.armStallTimer(message.id);
+        entry.onAck?.(message.index);
         break;
       case 'probe-result':
         this.settle(message.id, undefined, message.support);

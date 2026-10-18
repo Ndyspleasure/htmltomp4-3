@@ -1,9 +1,11 @@
 import { PREVIEW } from '../../../config/converter-config';
 import { ConverterError } from '../errors';
+import type { DetectedTiming } from '../render/sandbox-protocol';
 import type { PreviewBundle } from '../types';
 
 export type PreviewEvent =
   | { type: 'loaded'; warnings: string[] }
+  | { type: 'timing'; timing: DetectedTiming }
   | { type: 'runtime-error'; message: string }
   | { type: 'failed'; error: ConverterError };
 
@@ -107,6 +109,8 @@ export function mountPreview(container: HTMLElement, bundle: PreviewBundle, opti
           const error = new ConverterError('preview-failed', `Preview gagal dimuat: ${message}`);
           options.onEvent?.({ type: 'failed', error });
           reject(error);
+        } else if (type === 'h2m:sandbox-timing' && 'timing' in data) {
+          options.onEvent?.({ type: 'timing', timing: sanitizeTiming((data as { timing: unknown }).timing) });
         } else if (type === 'h2m:sandbox-runtime-error') {
           options.onEvent?.({ type: 'runtime-error', message });
         }
@@ -160,5 +164,18 @@ export function mountPreview(container: HTMLElement, bundle: PreviewBundle, opti
       iframe.src = 'about:blank';
       stage.remove();
     },
+  };
+}
+
+/** Timing comes from the untrusted sandbox; keep only well-typed, bounded values. */
+function sanitizeTiming(raw: unknown): DetectedTiming {
+  const value = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const duration = Number(value['durationSeconds']);
+  const layout = value['layout'];
+  return {
+    durationSeconds: value['durationSeconds'] !== null && Number.isFinite(duration) && duration > 0 ? duration : null,
+    looping: value['looping'] === true,
+    sources: Array.isArray(value['sources']) ? value['sources'].slice(0, 6).map((s) => String(s).slice(0, 60)) : [],
+    layout: layout === 'portrait' || layout === 'square' || layout === 'landscape' ? layout : null,
   };
 }

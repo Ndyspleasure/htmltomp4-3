@@ -2,7 +2,7 @@
 
 > Dokumen rancangan teknis. Nama produk, identitas visual, dan domain belum ditetapkan. Dokumen ini menjadi acuan implementasi untuk developer.
 >
-> **Status implementasi (v0.1.0):** Fase 1–5 MVP sudah diimplementasikan. Keputusan yang menyimpang dari rancangan awal dicatat di §16 (ADR) dan ditandai di bagian terkait.
+> **Status implementasi (v0.2.0):** Fase 1–5 MVP sudah diimplementasikan, ditambah metode Konversi langsung (ADR-005). Keputusan yang menyimpang dari rancangan awal dicatat di §16 (ADR) dan ditandai di bagian terkait.
 
 ## 1. Ringkasan proyek
 
@@ -396,6 +396,17 @@ Referensi resmi untuk implementasi dan validasi kompatibilitas:
 - `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` (`display-capture=(self)`, fitur sensitif lain dimatikan), `Cross-Origin-Opener-Policy: same-origin` (jendela preview tetap same-origin).
 - Kamera/mikrofon tidak dimatikan lewat header karena Chromium melaporkan pelanggaran saat capture audio tab; aplikasi tidak pernah memanggil `getUserMedia`.
 - `scripts/serve-dist.mjs` menerapkan header yang sama untuk E2E agar perilaku CSP teruji sebelum deploy.
+
+### ADR-005 — Konversi langsung tanpa izin rekam layar (metode default sejak v0.2.0)
+
+- **Masalah:** pengguna melaporkan (Jam) bahwa alur rekam layar membingungkan: animasi yang menunggu klik “▶ Putar” tidak pernah mulai, konten vertikal terekam kecil di viewport 16:9, dan durasi harus ditebak manual.
+- **Keputusan:** metode **Konversi langsung** menjadi default; rekam layar tetap tersedia sebagai cadangan. Dokumen dimuat ke iframe sandbox tersembunyi (origin opaque yang sama, tanpa izin baru) dalam mode render:
+  - **Jam virtual** (`src/sandbox/virtual-clock.ts`) mengganti `setTimeout/setInterval`, `requestAnimationFrame`, `performance.now` dan `Date`; animasi CSS/Web Animations di-pause dan di-seek per frame; `<video>` di-seek ke posisi virtualnya.
+  - **Pass analisis** (cepat, tanpa raster): klik otomatis tombol Putar/Play, lalu durasi = deklarasi `h2m:duration` → timing GSAP/anime.js/Lottie/CSS → “berhenti berubah” (tidak ada mutasi DOM, gambar canvas, atau animasi terbatas selama 2 detik, ditambah 0,5 detik penutup). Loop CSS tanpa akhir → durasi yang diisi pengguna, dengan pemberitahuan.
+  - **Audio:** pemutaran `<audio>/<video>` dicatat di timeline virtual lalu di-mix offline (`OfflineAudioContext`); output Web Audio direkam real-time di dalam sandbox (koneksi ke speaker dialihkan ke `MediaStreamAudioDestinationNode` + `MediaRecorder`). `speechSynthesis` tidak dapat direkam browser dan diberi peringatan.
+  - **Pass render:** setiap frame dirasterisasi dengan `modern-screenshot` (SVG foreignObject; semua computed style di-inline karena iframe bantu tidak dapat dibaca di origin opaque) → `ImageBitmap` → Web Worker → Mediabunny `VideoSampleSource`. Maksimal 3 frame in-flight (backpressure).
+- **Saran tata letak:** preview mendeteksi elemen “panggung” dominan; bila vertikal/persegi, UI menawarkan preset 1080×1920 / 1080×1080.
+- **Batasan:** rasterisasi DOM tidak identik 100% dengan rendering browser (mis. `backdrop-filter`, iframe di dalam animasi, font/gambar cross-origin tanpa CORS); Safari dapat menandai canvas foreignObject sebagai tainted. Untuk kasus itu, gunakan metode Rekam layar.
 
 ### ADR-004 — Verifikasi tab yang direkam
 

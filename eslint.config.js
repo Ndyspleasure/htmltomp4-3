@@ -35,6 +35,8 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-empty': ['error', { allowEmptyCatch: false }],
       eqeqeq: ['error', 'always'],
+      // Prototype patches in the sandbox need the patched method's own `this` plus the owning object.
+      '@typescript-eslint/no-this-alias': ['error', { allowedNames: ['clock', 'tracker', 'capture'] }],
     },
   },
 );

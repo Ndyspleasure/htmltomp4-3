@@ -11,22 +11,23 @@
 import { ASSET_TOKEN_PATTERN } from '../features/converter/preview/asset-token';
 import { ReferenceResolver } from '../features/converter/preview/reference-resolver';
 import { rewriteHtml } from '../features/converter/preview/rewrite-html';
+import type { AppToSandbox, SandboxMode, SandboxToApp } from '../features/converter/render/sandbox-protocol';
 import type { PreviewAsset, PreviewBundle } from '../features/converter/types';
 import { dirname } from '../features/converter/validation/archive-path';
+import { detectTiming } from './duration-detect';
+import { detectLayout } from './layout-detect';
+import { AudioPassController, RenderController } from './render-controller';
 
 const PROTOCOL = 1;
 const MAX_REPORTED_MISSING = 10;
 const appOrigin = new URL(location.href).origin;
 let loaded = false;
 
-type SandboxMessage =
-  | { type: 'h2m:sandbox-ready' }
-  | { type: 'h2m:sandbox-loaded'; warnings: string[] }
-  | { type: 'h2m:sandbox-error'; message: string }
-  | { type: 'h2m:sandbox-runtime-error'; message: string };
+/** How long the preview runs before the duration is estimated (gives load handlers time to start animations). */
+const TIMING_DELAY_MS = 600;
 
-function post(message: SandboxMessage): void {
-  parent.postMessage({ ...message, protocol: PROTOCOL }, '*');
+function post(message: SandboxToApp, transfer: Transferable[] = []): void {
+  parent.postMessage({ ...message, protocol: PROTOCOL }, '*', transfer);
 }
 
 interface PreparedDocument {
@@ -180,27 +181,102 @@ function installShim(mapUrl: (input: string) => string): void {
   }
 }
 
+function isFromApp(event: MessageEvent): boolean {
+  return event.source === parent && event.origin === appOrigin;
+}
+
 function onMessage(event: MessageEvent): void {
-  if (event.source !== parent || event.origin !== appOrigin) return;
-  const data = event.data as { type?: unknown; bundle?: PreviewBundle } | null;
+  if (!isFromApp(event)) return;
+  const data = event.data as Partial<Extract<AppToSandbox, { type: 'h2m:load' }>> | null;
   if (!data || data.type !== 'h2m:load' || !data.bundle || loaded) return;
   loaded = true;
   window.removeEventListener('message', onMessage);
+  const mode: SandboxMode = data.mode === 'render' || data.mode === 'audio' ? data.mode : 'preview';
   try {
     const bundle = data.bundle;
     const prepared = prepareDocument(bundle);
     const { urls, replaceTokens } = buildUrls(prepared.assets);
     installShim(createUrlMapper(urls, bundle.pathIndex, bundle.baseDir, document.baseURI));
+    const controller = mode === 'render' ? new RenderController(window, post) : null;
+    const audioPass = mode === 'audio' ? new AudioPassController(window) : null;
+    controller?.install();
+    audioPass?.install();
     const html = replaceTokens(prepared.html);
+    const writtenAt = performance.now();
     document.open();
     document.write(html);
     document.close();
+    // document.open() removed earlier listeners; register the post-load ones now.
     window.addEventListener('error', (errorEvent) => {
       post({ type: 'h2m:sandbox-runtime-error', message: String(errorEvent.message || 'Error') });
     });
+    if (controller) {
+      controller.afterWrite();
+      window.addEventListener('message', (message) => handleRenderMessage(message, controller));
+    } else if (audioPass) {
+      window.addEventListener('message', (message) => handleAudioMessage(message, audioPass));
+    } else {
+      setTimeout(() => {
+        try {
+          const timing = detectTiming(window, performance.now() - writtenAt);
+          post({ type: 'h2m:sandbox-timing', timing: { ...timing, layout: detectLayout(document) } });
+        } catch {
+          // Timing detection is best effort; the user can always enter a duration manually.
+        }
+      }, TIMING_DELAY_MS);
+    }
     post({ type: 'h2m:sandbox-loaded', warnings: prepared.warnings });
   } catch (error) {
     post({ type: 'h2m:sandbox-error', message: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+function handleAudioMessage(event: MessageEvent, controller: AudioPassController): void {
+  if (!isFromApp(event)) return;
+  const message = event.data as AppToSandbox;
+  if (message.type !== 'h2m:record-audio') return;
+  controller
+    .record(message)
+    .then((captures) =>
+      post(
+        { type: 'h2m:audio-result', captures },
+        captures.map((c) => c.data),
+      ),
+    )
+    .catch((error: unknown) =>
+      post({ type: 'h2m:render-error', message: error instanceof Error ? error.message : String(error) }),
+    );
+}
+
+function handleRenderMessage(event: MessageEvent, controller: RenderController): void {
+  if (!isFromApp(event)) return;
+  const message = event.data as AppToSandbox;
+  const fail = (error: unknown) =>
+    post({ type: 'h2m:render-error', message: error instanceof Error ? error.message : String(error) });
+  switch (message.type) {
+    case 'h2m:analyze':
+      controller
+        .analyze(message)
+        .then((result) =>
+          post(
+            { type: 'h2m:analyze-result', ...result },
+            result.audio.map((a) => a.data),
+          ),
+        )
+        .catch(fail);
+      break;
+    case 'h2m:render':
+      controller
+        .render(message)
+        .then((frames) => post({ type: 'h2m:render-done', frames }))
+        .catch(fail);
+      break;
+    case 'h2m:render-ack':
+      controller.ack(message.index);
+      break;
+    case 'h2m:render-cancel':
+      controller.cancel();
+      break;
   }
 }
 

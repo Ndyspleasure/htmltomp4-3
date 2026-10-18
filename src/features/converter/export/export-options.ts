@@ -37,3 +37,30 @@ export function formatAvailability(
   }
   return { available: false, reason: 'Browser tidak memiliki encoder video untuk MP4 (H.264/VP9/AV1).' };
 }
+
+/** Availability for "Konversi langsung": only encoders matter (no capture APIs involved). */
+export function directFormatAvailability(
+  format: OutputFormat,
+  support: EncoderSupport,
+  canRender: boolean,
+): FormatAvailability {
+  if (!canRender)
+    return {
+      available: false,
+      reason: 'Browser tidak mendukung render langsung (createImageBitmap/OfflineAudioContext).',
+    };
+  if (format === 'mp3') {
+    return support.mp3
+      ? { available: true }
+      : { available: false, reason: 'Encoder MP3 tidak dapat dimuat (WebAssembly tidak tersedia).' };
+  }
+  if (format === 'webm') {
+    return support.webmVideo ? { available: true } : { available: false, reason: 'Tidak ada encoder VP8/VP9/AV1.' };
+  }
+  return bestMp4Codec(support)
+    ? { available: true }
+    : {
+        available: false,
+        reason: 'Browser tidak memiliki encoder video untuk MP4 (H.264/VP9/AV1). Coba metode rekam layar.',
+      };
+}

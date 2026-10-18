@@ -60,9 +60,18 @@ export async function loadFixture(page: Page, file: string | { name: string; mim
 
 export async function configure(
   page: Page,
-  settings: { format?: string; duration?: number; mode?: 'this-tab' | 'preview-window'; includeAudio?: boolean },
+  settings: {
+    method?: 'direct' | 'capture';
+    format?: string;
+    duration?: number;
+    autoDuration?: boolean;
+    mode?: 'this-tab' | 'preview-window';
+    includeAudio?: boolean;
+  },
 ) {
+  if (settings.method) await page.check(`input[name="method"][value="${settings.method}"]`);
   if (settings.format) await page.check(`input[name="outputFormat"][value="${settings.format}"]`);
+  if (settings.autoDuration === false) await page.uncheck('input[name="autoDuration"]');
   if (settings.duration !== undefined) {
     await page.fill('input[name="durationSeconds"]', String(settings.duration));
     await page.locator('input[name="durationSeconds"]').dispatchEvent('change');
